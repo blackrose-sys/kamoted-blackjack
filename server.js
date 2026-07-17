@@ -490,6 +490,7 @@ function getPublicState(room, forPlayerId) {
       canDouble: room.phase === 'playing' && idx === room.currentPlayerIndex
         ? p.hands.map((h, i) => i === p.currentHandIndex && canDouble(h, p))
         : p.hands.map(() => false),
+      isBusted: p.chips <= 0 && room.phase === 'results',
     })),
     you: forPlayerId,
   };
@@ -610,6 +611,23 @@ wss.on('connection', (ws) => {
         if (!player) return;
         const text = (msg.text || '').substring(0, 200);
         broadcastMessage(room, text, player.name);
+        break;
+      }
+
+      case 'leave_room': {
+        const room = rooms.get(ws._roomCode);
+        if (!room) return;
+        const player = room.players.find(p => p.id === ws._playerId);
+        if (player) {
+          broadcastMessage(room, `${player.name} left the table`);
+          removePlayerFromRoom(room, ws._playerId);
+          if (room.players.length > 0) {
+            broadcastState(room);
+          }
+        }
+        ws._roomCode = null;
+        ws._playerId = null;
+        sendTo(ws, 'left_room', {});
         break;
       }
     }

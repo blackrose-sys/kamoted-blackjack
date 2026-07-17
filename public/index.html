@@ -191,10 +191,29 @@
           <div class="results-list" id="resultsList">
             <!-- Results here -->
           </div>
-          <button class="btn btn-primary btn-glow btn-large" id="newRoundBtn" style="display:none;">
-            Next Round
-          </button>
+          <div class="results-actions">
+            <button class="btn btn-primary btn-glow btn-large" id="newRoundBtn" style="display:none;">
+              Next Round
+            </button>
+            <button class="btn btn-ghost" id="leaveTableBtn">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;vertical-align:middle;margin-right:4px;"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Leave Table
+            </button>
+          </div>
           <p class="results-hint" id="resultsHint" style="display:none;">Waiting for host...</p>
+        </div>
+      </div>
+
+      <!-- Busted Overlay (no chips left) -->
+      <div class="busted-overlay" id="bustedOverlay" style="display:none;">
+        <div class="busted-panel glass-panel">
+          <div class="busted-icon">💸</div>
+          <h2 class="busted-title">You're Busted!</h2>
+          <p class="busted-text">You've run out of chips. Better luck next time!</p>
+          <button class="btn btn-primary btn-glow btn-large" id="bustedLobbyBtn">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;vertical-align:middle;margin-right:6px;"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            Back to Lobby
+          </button>
         </div>
       </div>
     </div>

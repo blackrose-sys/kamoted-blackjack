@@ -69,6 +69,10 @@ const els = {
   resultsList: $('resultsList'),
   newRoundBtn: $('newRoundBtn'),
   resultsHint: $('resultsHint'),
+  leaveTableBtn: $('leaveTableBtn'),
+
+  bustedOverlay: $('bustedOverlay'),
+  bustedLobbyBtn: $('bustedLobbyBtn'),
 
   soundToggle: $('soundToggle'),
 
@@ -151,6 +155,12 @@ function handleMessage(msg) {
       handleStateUpdate(msg.data);
       break;
 
+    case 'left_room':
+      showView('lobby');
+      resetAnimationState();
+      els.bustedOverlay.style.display = 'none';
+      break;
+
     case 'error':
       showToast(msg.data.message, 'error');
       break;
@@ -172,6 +182,13 @@ function handleStateUpdate(state) {
   if (me) {
     els.chipDisplay.style.display = 'flex';
     els.chipAmount.textContent = me.chips.toLocaleString();
+    
+    // Check if player is busted (0 chips on results)
+    if (me.isBusted) {
+      els.bustedOverlay.style.display = 'flex';
+    } else {
+      els.bustedOverlay.style.display = 'none';
+    }
   }
 
   if (state.phase === 'waiting') {
@@ -1187,6 +1204,18 @@ document.addEventListener('DOMContentLoaded', () => {
     sounds.click();
     send('new_round');
     resetAnimationState();
+  });
+
+  // Leave Table
+  els.leaveTableBtn.addEventListener('click', () => {
+    sounds.click();
+    send('leave_room');
+  });
+
+  // Busted Back to Lobby
+  els.bustedLobbyBtn.addEventListener('click', () => {
+    sounds.click();
+    send('leave_room');
   });
 
   // Sound toggle
