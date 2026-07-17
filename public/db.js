@@ -230,13 +230,13 @@ const DB = {
       chips: chips,
     };
 
-    let rpChange = 0;
+    let lpChange = 0;
     if (outcome === 'win') {
       updates.wins = (this.currentUser.wins || 0) + 1;
-      rpChange = isBlackjack ? 25 : 15;
+      lpChange = isBlackjack ? 25 : 15;
     } else if (outcome === 'lose') {
       updates.losses = (this.currentUser.losses || 0) + 1;
-      rpChange = -10;
+      lpChange = -10;
     } else if (outcome === 'push') {
       updates.draws = (this.currentUser.draws || 0) + 1;
     }
@@ -245,8 +245,8 @@ const DB = {
       updates.blackjacks = (this.currentUser.blackjacks || 0) + 1;
     }
 
-    // RP updates
-    updates.rank_points = Math.max(0, (this.currentUser.rank_points || 0) + rpChange);
+    // LP updates
+    updates.rank_points = Math.max(0, (this.currentUser.rank_points || 0) + lpChange);
 
     const updated = await this.updateProfile(updates);
     return updated;

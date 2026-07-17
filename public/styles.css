@@ -412,8 +412,8 @@ textarea:focus {
 /* ═══════════════════════════════════════════════════════════════════
    LOBBY & AUTH VIEWS
    ═══════════════════════════════════════════════════════════════════ */
-#authView,
-#lobbyView {
+#authView.active,
+#lobbyView.active {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2635,3 +2635,209 @@ textarea:focus {
   text-decoration: underline solid var(--gold-400);
 }
 
+/* ─── Leaderboard Rows (loadLeaderboard dynamic) ─── */
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 450px;
+  overflow-y: auto;
+}
+
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-md);
+  transition: background 0.2s;
+}
+
+.leaderboard-row:hover {
+  background: rgba(212,169,52,0.06);
+}
+
+.lb-rank {
+  font-size: 1.2rem;
+  min-width: 32px;
+  text-align: center;
+}
+
+.lb-player {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex: 1;
+}
+
+.lb-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.lb-badge {
+  font-size: 1.1rem;
+}
+
+.lb-chips {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--gold-300);
+}
+
+/* ─── Avatar Option Selection ─── */
+.avatar-option {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1rem;
+  color: #fff;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: all 0.25s var(--ease-smooth);
+}
+
+.avatar-option:hover {
+  transform: scale(1.15);
+}
+
+.avatar-option.selected {
+  border-color: var(--gold-400);
+  box-shadow: 0 0 15px rgba(212,169,52,0.4);
+  transform: scale(1.15);
+}
+
+/* ─── Settings Content Area ─── */
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  animation: fadeIn 0.3s var(--ease-smooth);
+}
+
+.settings-content form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.avatar-grid {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: var(--space-sm) 0;
+}
+
+/* ─── Profile Card in Stalk Modal ─── */
+.profile-panel {
+  max-width: 400px;
+  width: 100%;
+  padding: var(--space-xl);
+}
+
+.profile-card-header {
+  text-align: center;
+  margin-bottom: var(--space-lg);
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.8rem;
+  color: #fff;
+  margin: 0 auto var(--space-sm);
+  border: 3px solid rgba(212,169,52,0.3);
+}
+
+.profile-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.lol-rank-badge {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.profile-bio {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+  padding: var(--space-sm) 0;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  margin-bottom: var(--space-md);
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
+}
+
+.stat-box {
+  text-align: center;
+  padding: var(--space-sm);
+  background: rgba(0,0,0,0.2);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.stat-value {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--gold-300);
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+/* ─── Settings Tabs ─── */
+.settings-tabs {
+  display: flex;
+  background: rgba(0,0,0,0.35);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  margin-bottom: var(--space-md);
+}
+
+.settings-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  border-radius: var(--radius-md);
+  transition: all 0.25s;
+}
+
+.settings-tab.active {
+  background: rgba(212,169,52,0.15);
+  color: var(--gold-300);
+}

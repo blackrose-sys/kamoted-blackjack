@@ -1148,6 +1148,96 @@ function sendChat() {
   els.chatInput.value = '';
 }
 
+// ─── Update User Profile UI (Header badge) ──────────────────────
+function updateUserProfileUI() {
+  if (!DB.currentUser) return;
+  const u = DB.currentUser;
+  const rank = getRankInfo(u.rank_points || 0);
+
+  // Show header badges
+  els.userProfileBadge.style.display = 'flex';
+  els.leaderboardBtn.style.display = 'inline-flex';
+  els.settingsBtn.style.display = 'inline-flex';
+
+  // Update header avatar
+  els.headerAvatar.className = 'user-badge-avatar ' + (u.pfp || 'avatar-1');
+  els.headerAvatar.textContent = u.username[0].toUpperCase();
+  els.headerUsername.textContent = u.username;
+  els.headerRank.textContent = rank.badge + ' ' + rank.name;
+  els.headerRank.style.color = rank.color;
+
+  // Update lobby username
+  if (els.lobbyUserName) els.lobbyUserName.textContent = u.username;
+}
+
+// ─── Stalk Player (Profile Inspection) ───────────────────────────
+async function stalkPlayer(username) {
+  if (!username) return;
+  try {
+    const profile = await DB.getProfile(username);
+    const rank = getRankInfo(profile.rank_points || 0);
+
+    els.profileAvatar.className = 'profile-avatar ' + (profile.pfp || 'avatar-1');
+    els.profileAvatar.textContent = profile.username[0].toUpperCase();
+    els.profileUsername.textContent = profile.username;
+    els.profileRankBadge.textContent = rank.badge + ' ' + rank.name;
+    els.profileRankBadge.style.color = rank.color;
+    els.profileBio.textContent = profile.bio || 'No bio yet...';
+    els.profileStatChips.textContent = (profile.chips || 0).toLocaleString();
+    els.profileStatRP.textContent = (profile.rank_points || 0).toLocaleString() + ' LP';
+
+    const totalGames = (profile.wins || 0) + (profile.losses || 0) + (profile.draws || 0);
+    const winRate = totalGames > 0 ? Math.round(((profile.wins || 0) / totalGames) * 100) : 0;
+
+    els.profileStatWins.textContent = profile.wins || 0;
+    els.profileStatWR.textContent = winRate + '%';
+    els.profileStatBJs.textContent = profile.blackjacks || 0;
+
+    els.profileModal.style.display = 'flex';
+  } catch (err) {
+    showToast('Could not load player profile', 'error');
+  }
+}
+
+// ─── Load Leaderboard ────────────────────────────────────────────
+async function loadLeaderboard() {
+  try {
+    const leaders = await DB.getLeaderboard();
+    els.leaderboardList.innerHTML = '';
+
+    if (leaders.length === 0) {
+      els.leaderboardList.innerHTML = '<div style="text-align:center;padding:var(--space-lg);color:var(--text-muted);">No players yet</div>';
+      return;
+    }
+
+    leaders.forEach((player, i) => {
+      const rank = getRankInfo(player.rank_points || 0);
+      const medals = ['🥇', '🥈', '🥉'];
+      const medal = medals[i] || `#${i + 1}`;
+
+      const row = document.createElement('div');
+      row.className = 'leaderboard-row';
+      row.innerHTML = `
+        <span class="lb-rank">${medal}</span>
+        <div class="lb-player">
+          <div class="user-badge-avatar ${player.pfp || 'avatar-1'}" style="width:28px;height:28px;font-size:0.7rem;">${(player.username || 'P')[0].toUpperCase()}</div>
+          <span class="lb-name stalk-trigger" data-username="${player.username}">${player.username}</span>
+        </div>
+        <span class="lb-badge" style="color:${rank.color}">${rank.badge}</span>
+        <span class="lb-chips">🪙 ${(player.chips || 0).toLocaleString()}</span>
+      `;
+
+      row.querySelector('.stalk-trigger').addEventListener('click', (e) => {
+        stalkPlayer(e.target.dataset.username);
+      });
+
+      els.leaderboardList.appendChild(row);
+    });
+  } catch (err) {
+    els.leaderboardList.innerHTML = '<div style="text-align:center;padding:var(--space-lg);color:var(--text-muted);">Failed to load leaderboard</div>';
+  }
+}
+
 // ─── Event Listeners ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize audio on first interaction
@@ -1222,6 +1312,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!username || !password) return;
 
+    els.authSubmitBtn.disabled = true;
+    els.authSubmitBtn.textContent = 'Please wait...';
+
     try {
       if (authMode === 'login') {
         const user = await DB.login(username, password);
@@ -1234,7 +1327,10 @@ document.addEventListener('DOMContentLoaded', () => {
       updateUserProfileUI();
       showView('lobby');
     } catch (err) {
-      showToast(err.message, 'error');
+      showToast(err.message || 'Authentication failed', 'error');
+    } finally {
+      els.authSubmitBtn.disabled = false;
+      els.authSubmitBtn.textContent = authMode === 'login' ? 'Login' : 'Sign Up';
     }
   });
 
@@ -1254,11 +1350,15 @@ document.addEventListener('DOMContentLoaded', () => {
     els.authPassword.value = '';
     
     showView('auth');
+    showToast('Logged out', 'info');
   });
 
   // ── Lobby Actions ──
   els.createRoomBtn.addEventListener('click', () => {
-    if (!DB.currentUser) return;
+    if (!DB.currentUser) {
+      showToast('Please log in first', 'warning');
+      return;
+    }
     sounds.click();
     send('create_room', {
       name: DB.currentUser.username,
@@ -1270,7 +1370,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   els.joinRoomBtn.addEventListener('click', () => {
-    if (!DB.currentUser) return;
+    if (!DB.currentUser) {
+      showToast('Please log in first', 'warning');
+      return;
+    }
     const code = els.roomCodeInput.value.trim().toUpperCase();
     if (!code) {
       showToast('Enter a room code to join', 'warning');
@@ -1377,7 +1480,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
     if (els.actionBar.style.display !== 'none') {
       switch (e.key.toLowerCase()) {
@@ -1419,6 +1522,118 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast(enabled ? 'Sound on' : 'Sound off', 'info', 1500);
   });
 
+  // ── Settings Modal ──
+  els.settingsBtn.addEventListener('click', () => {
+    sounds.click();
+    if (DB.currentUser) {
+      els.settingsBio.value = DB.currentUser.bio || '';
+      // Highlight current avatar
+      document.querySelectorAll('.avatar-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.avatar === (DB.currentUser.pfp || 'avatar-1'));
+      });
+    }
+    els.settingsModal.style.display = 'flex';
+  });
+
+  els.closeSettingsBtn.addEventListener('click', () => {
+    sounds.click();
+    els.settingsModal.style.display = 'none';
+  });
+
+  // Settings tab switcher
+  els.tabProfileSettingsBtn.addEventListener('click', () => {
+    sounds.click();
+    els.tabProfileSettingsBtn.classList.add('active');
+    els.tabSecuritySettingsBtn.classList.remove('active');
+    els.profileSettingsContent.style.display = 'block';
+    els.securitySettingsContent.style.display = 'none';
+  });
+
+  els.tabSecuritySettingsBtn.addEventListener('click', () => {
+    sounds.click();
+    els.tabSecuritySettingsBtn.classList.add('active');
+    els.tabProfileSettingsBtn.classList.remove('active');
+    els.securitySettingsContent.style.display = 'block';
+    els.profileSettingsContent.style.display = 'none';
+  });
+
+  // Avatar picker
+  let selectedAvatar = DB.currentUser?.pfp || 'avatar-1';
+  document.querySelectorAll('.avatar-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      sounds.click();
+      selectedAvatar = opt.dataset.avatar;
+      document.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+
+  // Profile settings save
+  els.profileSettingsForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    sounds.click();
+    try {
+      await DB.updateProfile({
+        bio: els.settingsBio.value.trim() || 'No bio yet...',
+        pfp: selectedAvatar
+      });
+      updateUserProfileUI();
+      showToast('Profile updated!', 'success');
+      els.settingsModal.style.display = 'none';
+    } catch (err) {
+      showToast(err.message || 'Failed to save profile', 'error');
+    }
+  });
+
+  // Security settings (password change)
+  els.securitySettingsForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    sounds.click();
+    const newPw = els.settingsNewPassword.value;
+    if (!newPw || newPw.length < 4) {
+      showToast('Password must be at least 4 characters', 'warning');
+      return;
+    }
+    try {
+      await DB.changePassword(newPw);
+      showToast('Password changed successfully!', 'success');
+      els.settingsNewPassword.value = '';
+      els.settingsModal.style.display = 'none';
+    } catch (err) {
+      showToast(err.message || 'Failed to change password', 'error');
+    }
+  });
+
+  // ── Leaderboard Modal ──
+  els.leaderboardBtn.addEventListener('click', () => {
+    sounds.click();
+    els.leaderboardModal.style.display = 'flex';
+    loadLeaderboard();
+  });
+
+  els.closeLeaderboardBtn.addEventListener('click', () => {
+    sounds.click();
+    els.leaderboardModal.style.display = 'none';
+  });
+
+  // ── Profile Inspect Modal ──
+  els.closeProfileBtn.addEventListener('click', () => {
+    sounds.click();
+    els.profileModal.style.display = 'none';
+  });
+
+  // Close modals by clicking overlay
+  [els.settingsModal, els.leaderboardModal, els.profileModal].forEach(modal => {
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          sounds.click();
+          modal.style.display = 'none';
+        }
+      });
+    }
+  });
+
   // Chat
   els.chatBubble.addEventListener('click', toggleChat);
   els.chatClose.addEventListener('click', toggleChat);
@@ -1427,6 +1642,3 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') sendChat();
   });
 });
-
-// Prevent form submission
-document.addEventListener('submit', (e) => e.preventDefault());
