@@ -81,6 +81,33 @@
 
       <!-- Auth Box -->
       <div class="auth-box glass-panel">
+        <!-- Floating Database Configuration Button -->
+        <button class="db-setup-trigger" id="dbSetupTrigger" title="Database Configuration">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
+
+        <!-- Database Configuration Panel Overlay -->
+        <div class="db-setup-panel" id="dbSetupPanel" style="display:none;">
+          <div class="db-setup-title">
+            <span>Supabase Database Config</span>
+            <button class="db-setup-close" id="dbSetupClose">✕</button>
+          </div>
+          <p style="font-size:0.8rem;color:var(--text-muted);line-height:1.4;">
+            Configure your Supabase Project settings below. Leaving fields empty will use a mock database.
+          </p>
+          <form id="dbSetupForm" style="display:flex;flex-direction:column;gap:12px;">
+            <div class="input-group">
+              <label for="dbUrl">Supabase URL</label>
+              <input type="url" id="dbUrl" placeholder="https://your-project.supabase.co" autocomplete="off" style="font-size:0.85rem;padding:8px 12px;">
+            </div>
+            <div class="input-group">
+              <label for="dbAnonKey">Supabase Anon Key</label>
+              <input type="password" id="dbAnonKey" placeholder="your-sb-anon-key" autocomplete="off" style="font-size:0.85rem;padding:8px 12px;">
+            </div>
+            <button type="submit" class="btn btn-primary btn-glow" style="padding:10px;">Save Credentials</button>
+          </form>
+        </div>
+
         <div class="auth-tabs">
           <button class="auth-tab active" id="tabLoginBtn">Login</button>
           <button class="auth-tab" id="tabSignupBtn">Sign Up</button>

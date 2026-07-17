@@ -2068,21 +2068,52 @@ input[type="text"]:focus {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   AUTHENTICATION & TABBED CARD DESIGN
+   AUTHENTICATION & TABBED CARD DESIGN (Ultra-Modern Premium Casino)
    ═══════════════════════════════════════════════════════════════════ */
 .auth-box {
   width: 100%;
-  padding: var(--space-xl) var(--space-lg);
+  padding: var(--space-xl);
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
-  animation: fadeIn 0.4s var(--ease-smooth);
+  gap: var(--space-xl);
+  background: rgba(13, 17, 23, 0.45);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border: 1px solid rgba(212, 169, 52, 0.15);
+  border-radius: var(--radius-xl);
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: authFadeSlide 0.6s var(--ease-spring);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Background gradient glow inside the auth box */
+.auth-box::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(212, 169, 52, 0.03) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes authFadeSlide {
+  0% { opacity: 0; transform: translateY(30px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .auth-tabs {
   display: flex;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: var(--space-sm);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  z-index: 1;
 }
 
 .auth-tab {
@@ -2090,44 +2121,126 @@ input[type="text"]:focus {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-weight: 600;
-  padding: 12px;
+  font-weight: 700;
+  padding: 10px;
   cursor: pointer;
-  font-size: 1rem;
-  transition: all 0.25s var(--ease-smooth);
-  border-bottom: 2px solid transparent;
+  font-size: 0.95rem;
+  transition: all 0.3s var(--ease-smooth);
+  border-radius: var(--radius-md);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.auth-tab:hover {
+  color: var(--text-primary);
 }
 
 .auth-tab.active {
-  color: var(--gold-400);
-  border-bottom-color: var(--gold-400);
-  text-shadow: 0 0 10px rgba(212, 169, 52, 0.25);
+  background: linear-gradient(135deg, var(--gold-500), var(--gold-700));
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(212, 169, 52, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 
 .auth-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  z-index: 1;
 }
 
 /* Signup Notice Alert */
 .signup-notice {
   display: flex;
   gap: var(--space-sm);
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
   border-radius: var(--radius-md);
   padding: var(--space-md);
-  color: #f59e0b;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  animation: fadeIn 0.3s var(--ease-smooth);
+  color: #fbbf24;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  animation: slideDownIn 0.3s var(--ease-spring);
+}
+
+@keyframes slideDownIn {
+  0% { opacity: 0; transform: translateY(-10px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
 
 .notice-icon {
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   flex-shrink: 0;
+  animation: pulseWarning 1.5s infinite;
 }
+
+@keyframes pulseWarning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Database Configuration Floating Setup Button */
+.db-setup-trigger {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.25s;
+  z-index: 2;
+  opacity: 0.5;
+}
+
+.db-setup-trigger:hover {
+  color: var(--gold-400);
+  opacity: 1;
+  transform: rotate(45deg);
+}
+
+/* Database Setup Panel Overlay (Inside Auth Card) */
+.db-setup-panel {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 14, 20, 0.95);
+  backdrop-filter: blur(15px);
+  z-index: 10;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  animation: slideLeftIn 0.4s var(--ease-spring);
+  border-radius: var(--radius-xl);
+}
+
+@keyframes slideLeftIn {
+  0% { transform: translateX(100%); }
+  100% { transform: translateX(0); }
+}
+
+.db-setup-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem;
+  color: var(--gold-300);
+  margin-bottom: var(--space-xs);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.db-setup-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.db-setup-close:hover {
+  color: var(--danger);
+}
+
 
 /* ─── Header User Profile summary ─── */
 .user-profile-badge {

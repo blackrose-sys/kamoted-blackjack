@@ -39,6 +39,13 @@ const els = {
   authSubmitBtn: $('authSubmitBtn'),
   lobbyUserName: $('lobbyUserName'),
   logoutBtn: $('logoutBtn'),
+  
+  dbSetupTrigger: $('dbSetupTrigger'),
+  dbSetupPanel: $('dbSetupPanel'),
+  dbSetupClose: $('dbSetupClose'),
+  dbSetupForm: $('dbSetupForm'),
+  dbUrl: $('dbUrl'),
+  dbAnonKey: $('dbAnonKey'),
 
   createRoomBtn: $('createRoomBtn'),
   joinRoomBtn: $('joinRoomBtn'),
@@ -1154,32 +1161,135 @@ document.addEventListener('DOMContentLoaded', () => {
 
   connect();
 
-  // Lobby
-  els.createRoomBtn.addEventListener('click', () => {
-    const name = els.playerName.value.trim() || 'Player';
+  // ── Database Configuration ──
+  els.dbSetupTrigger.addEventListener('click', () => {
     sounds.click();
-    send('create_room', { name });
+    els.dbUrl.value = localStorage.getItem('SB_URL') || '';
+    els.dbAnonKey.value = localStorage.getItem('SB_KEY') || '';
+    els.dbSetupPanel.style.display = 'flex';
+  });
+
+  els.dbSetupClose.addEventListener('click', () => {
+    sounds.click();
+    els.dbSetupPanel.style.display = 'none';
+  });
+
+  els.dbSetupForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    sounds.click();
+    
+    const url = els.dbUrl.value.trim();
+    const key = els.dbAnonKey.value.trim();
+    
+    if (url) localStorage.setItem('SB_URL', url);
+    else localStorage.removeItem('SB_URL');
+
+    if (key) localStorage.setItem('SB_KEY', key);
+    else localStorage.removeItem('SB_KEY');
+
+    showToast('Database configured! Please refresh page to apply.', 'success');
+    els.dbSetupPanel.style.display = 'none';
+  });
+
+  // ── Auth View: Tab Switcher ──
+  let authMode = 'login'; // login or signup
+
+  els.tabLoginBtn.addEventListener('click', () => {
+    sounds.click();
+    authMode = 'login';
+    els.tabLoginBtn.classList.add('active');
+    els.tabSignupBtn.classList.remove('active');
+    els.signupNotice.style.display = 'none';
+    els.authSubmitBtn.textContent = 'Login';
+  });
+
+  els.tabSignupBtn.addEventListener('click', () => {
+    sounds.click();
+    authMode = 'signup';
+    els.tabSignupBtn.classList.add('active');
+    els.tabLoginBtn.classList.remove('active');
+    els.signupNotice.style.display = 'flex';
+    els.authSubmitBtn.textContent = 'Sign Up';
+  });
+
+  // ── Auth Form: Sign Up / Sign In ──
+  els.authForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    sounds.click();
+
+    const username = els.authUsername.value.trim();
+    const password = els.authPassword.value;
+
+    if (!username || !password) return;
+
+    try {
+      if (authMode === 'login') {
+        const user = await DB.login(username, password);
+        showToast(`Welcome back, ${user.username}!`, 'success');
+      } else {
+        const user = await DB.register(username, password);
+        showToast('Account registered successfully!', 'success');
+      }
+      
+      updateUserProfileUI();
+      showView('lobby');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  // ── Logout ──
+  els.logoutBtn.addEventListener('click', () => {
+    sounds.click();
+    DB.logout();
+    
+    // Hide headers
+    els.userProfileBadge.style.display = 'none';
+    els.leaderboardBtn.style.display = 'none';
+    els.settingsBtn.style.display = 'none';
+    els.chipDisplay.style.display = 'none';
+
+    // Clear forms
+    els.authUsername.value = '';
+    els.authPassword.value = '';
+    
+    showView('auth');
+  });
+
+  // ── Lobby Actions ──
+  els.createRoomBtn.addEventListener('click', () => {
+    if (!DB.currentUser) return;
+    sounds.click();
+    send('create_room', {
+      name: DB.currentUser.username,
+      chips: DB.currentUser.chips,
+      pfp: DB.currentUser.pfp,
+      rankPoints: DB.currentUser.rank_points,
+      bio: DB.currentUser.bio
+    });
   });
 
   els.joinRoomBtn.addEventListener('click', () => {
-    const name = els.playerName.value.trim() || 'Player';
+    if (!DB.currentUser) return;
     const code = els.roomCodeInput.value.trim().toUpperCase();
     if (!code) {
       showToast('Enter a room code to join', 'warning');
       return;
     }
     sounds.click();
-    send('join_room', { name, code });
+    send('join_room', {
+      name: DB.currentUser.username,
+      code: code,
+      chips: DB.currentUser.chips,
+      pfp: DB.currentUser.pfp,
+      rankPoints: DB.currentUser.rank_points,
+      bio: DB.currentUser.bio
+    });
   });
 
-  // Enter key on room code
+  // Enter key shortcuts
   els.roomCodeInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') els.joinRoomBtn.click();
-  });
-
-  // Enter key on name
-  els.playerName.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') els.createRoomBtn.click();
   });
 
   // Copy room code
