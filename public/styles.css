@@ -377,7 +377,10 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: 1px;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="password"],
+input[type="url"],
+textarea {
   width: 100%;
   padding: 14px 18px;
   background: rgba(0, 0, 0, 0.3);
@@ -390,23 +393,32 @@ input[type="text"] {
   outline: none;
 }
 
-input[type="text"]::placeholder {
+input[type="text"]::placeholder,
+input[type="password"]::placeholder,
+input[type="url"]::placeholder,
+textarea::placeholder {
   color: var(--text-muted);
 }
 
-input[type="text"]:focus {
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="url"]:focus,
+textarea:focus {
   border-color: var(--gold-400);
   box-shadow: 0 0 0 3px rgba(212, 169, 52, 0.1);
   background: rgba(0, 0, 0, 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   LOBBY VIEW
+   LOBBY & AUTH VIEWS
    ═══════════════════════════════════════════════════════════════════ */
+#authView,
 #lobbyView {
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--space-lg);
+  min-height: 100vh;
 }
 
 .lobby-container {
