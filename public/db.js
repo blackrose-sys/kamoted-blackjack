@@ -34,10 +34,10 @@ const RANKS = [
   { name: 'Challenger', min: 3000, color: '#00ffff', badge: '⚡' }
 ];
 
-function getRankInfo(rp) {
+function getRankInfo(lp) {
   let activeRank = RANKS[0];
   for (let i = RANKS.length - 1; i >= 0; i--) {
-    if (rp >= RANKS[i].min) {
+    if (lp >= RANKS[i].min) {
       activeRank = RANKS[i];
       break;
     }

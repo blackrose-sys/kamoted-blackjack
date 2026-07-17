@@ -117,7 +117,7 @@ const els = {
   profileRankBadge: $('profileRankBadge'),
   profileBio: $('profileBio'),
   profileStatChips: $('profileStatChips'),
-  profileStatRP: $('profileStatRP'),
+  profileStatLP: $('profileStatLP'),
   profileStatWins: $('profileStatWins'),
   profileStatWR: $('profileStatWR'),
   profileStatBJs: $('profileStatBJs'),
@@ -1184,7 +1184,7 @@ async function stalkPlayer(username) {
     els.profileRankBadge.style.color = rank.color;
     els.profileBio.textContent = profile.bio || 'No bio yet...';
     els.profileStatChips.textContent = (profile.chips || 0).toLocaleString();
-    els.profileStatRP.textContent = (profile.rank_points || 0).toLocaleString() + ' LP';
+    els.profileStatLP.textContent = (profile.rank_points || 0).toLocaleString() + ' LP';
 
     const totalGames = (profile.wins || 0) + (profile.losses || 0) + (profile.draws || 0);
     const winRate = totalGames > 0 ? Math.round(((profile.wins || 0) / totalGames) * 100) : 0;
