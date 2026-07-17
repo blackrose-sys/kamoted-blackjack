@@ -98,7 +98,7 @@ function canDouble(hand, player) {
 // ─── Room Management ─────────────────────────────────────────────────
 const rooms = new Map();
 
-function createRoom(hostWs, playerName) {
+function createRoom(hostWs, playerName, opts = {}) {
   let code = generateRoomCode();
   while (rooms.has(code)) code = generateRoomCode();
 
@@ -112,17 +112,20 @@ function createRoom(hostWs, playerName) {
     roundNumber: 0,
   };
 
-  addPlayerToRoom(room, hostWs, playerName, true);
+  addPlayerToRoom(room, hostWs, playerName, true, opts);
   rooms.set(code, room);
   return room;
 }
 
-function addPlayerToRoom(room, ws, playerName, isHost = false) {
+function addPlayerToRoom(room, ws, playerName, isHost = false, opts = {}) {
   const player = {
     ws,
     name: playerName,
     id: Math.random().toString(36).substr(2, 9),
-    chips: STARTING_CHIPS,
+    chips: opts.chips !== undefined ? parseInt(opts.chips) : STARTING_CHIPS,
+    pfp: opts.pfp || 'avatar-1',
+    rankPoints: opts.rankPoints !== undefined ? parseInt(opts.rankPoints) : 0,
+    bio: opts.bio || 'Ready to play!',
     hands: [[]],
     bets: [0],
     currentHandIndex: 0,
@@ -491,6 +494,9 @@ function getPublicState(room, forPlayerId) {
         ? p.hands.map((h, i) => i === p.currentHandIndex && canDouble(h, p))
         : p.hands.map(() => false),
       isBusted: p.chips <= 0 && room.phase === 'results',
+      pfp: p.pfp,
+      rankPoints: p.rankPoints,
+      bio: p.bio,
     })),
     you: forPlayerId,
   };
@@ -528,7 +534,13 @@ wss.on('connection', (ws) => {
     switch (msg.type) {
       case 'create_room': {
         const name = (msg.name || 'Player').substring(0, 20);
-        const room = createRoom(ws, name);
+        const opts = {
+          chips: msg.chips,
+          pfp: msg.pfp,
+          rankPoints: msg.rankPoints,
+          bio: msg.bio
+        };
+        const room = createRoom(ws, name, opts);
         sendTo(ws, 'room_created', { code: room.code });
         broadcastState(room);
         console.log(`Room ${room.code} created by ${name}`);
@@ -553,7 +565,13 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        addPlayerToRoom(room, ws, name);
+        const opts = {
+          chips: msg.chips,
+          pfp: msg.pfp,
+          rankPoints: msg.rankPoints,
+          bio: msg.bio
+        };
+        addPlayerToRoom(room, ws, name, false, opts);
         sendTo(ws, 'room_joined', { code: room.code });
         broadcastState(room);
         broadcastMessage(room, `${name} joined the table`);

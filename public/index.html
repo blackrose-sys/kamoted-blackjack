@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <!-- Supabase CDN Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -26,18 +28,40 @@
       <h1 class="brand">Kamoted<span class="brand-accent"> Blackjack</span></h1>
     </div>
     <div class="top-bar-right">
+      <!-- Leaderboard Trigger -->
+      <button class="icon-btn" id="leaderboardBtn" title="Leaderboard" style="display:none;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      </button>
+
+      <!-- Settings Trigger -->
+      <button class="icon-btn" id="settingsBtn" title="Settings" style="display:none;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+
+      <!-- Sound Toggle -->
       <button class="icon-btn sound-toggle" id="soundToggle" title="Toggle Sound">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
       </button>
+
+      <!-- User Profile Summary Trigger -->
+      <div class="user-profile-badge" id="userProfileBadge" style="display:none;" title="View Profile">
+        <div class="user-badge-avatar" id="headerAvatar">P</div>
+        <div class="user-badge-info">
+          <span class="user-badge-name" id="headerUsername">Player</span>
+          <span class="user-badge-rank" id="headerRank">Bronze</span>
+        </div>
+      </div>
+
+      <!-- Chip display -->
       <div class="chip-display" id="chipDisplay" style="display:none;">
         <span class="chip-icon">🪙</span>
-        <span class="chip-amount" id="chipAmount">1000</span>
+        <span class="chip-amount" id="chipAmount">10,000</span>
       </div>
     </div>
   </header>
 
-  <!-- ═══ LOBBY VIEW ═══ -->
-  <section class="view active" id="lobbyView">
+  <!-- ═══ AUTH VIEW (Active by default) ═══ -->
+  <section class="view active" id="authView">
     <div class="lobby-container">
       <div class="lobby-hero">
         <div class="suit-watermark">♠</div>
@@ -52,15 +76,61 @@
           </div>
         </div>
         <h2 class="lobby-title">Kamoted<br><span class="lobby-title-accent">Blackjack</span></h2>
-        <p class="lobby-subtitle">Multiplayer • Real-time • Up to 5 players</p>
+        <p class="lobby-subtitle">Persistent Accounts • LoL Rank System</p>
+      </div>
+
+      <!-- Auth Box -->
+      <div class="auth-box glass-panel">
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tabLoginBtn">Login</button>
+          <button class="auth-tab" id="tabSignupBtn">Sign Up</button>
+        </div>
+
+        <form class="auth-form" id="authForm">
+          <div class="input-group">
+            <label for="authUsername">Username</label>
+            <input type="text" id="authUsername" placeholder="Enter username..." minlength="3" maxlength="15" required autocomplete="off" spellcheck="false">
+          </div>
+          
+          <div class="input-group">
+            <label for="authPassword">Password</label>
+            <input type="password" id="authPassword" placeholder="Enter password..." minlength="4" required>
+          </div>
+
+          <!-- Save Password Notice (Hidden during Login, Visible during Sign Up) -->
+          <div class="signup-notice" id="signupNotice" style="display:none;">
+            <span class="notice-icon">⚠️</span>
+            <div class="notice-content">
+              <strong>Save your password!</strong> We do not ask for emails. If you forget your password, you cannot recover your account.
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-glow" id="authSubmitBtn">Login</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ LOBBY VIEW ═══ -->
+  <section class="view" id="lobbyView">
+    <div class="lobby-container">
+      <div class="lobby-hero">
+        <div class="suit-watermark">♠</div>
+        <div class="hero-cards">
+          <div class="hero-card hero-card-1">
+            <span class="hero-rank">A</span>
+            <span class="hero-suit hearts">♥</span>
+          </div>
+          <div class="hero-card hero-card-2">
+            <span class="hero-rank">K</span>
+            <span class="hero-suit spades">♠</span>
+          </div>
+        </div>
+        <h2 class="lobby-title">Kamoted<br><span class="lobby-title-accent">Blackjack</span></h2>
+        <p class="lobby-subtitle">Welcome back, <span id="lobbyUserName" style="color:var(--gold-300);font-weight:700;">Player</span></p>
       </div>
 
       <div class="lobby-form glass-panel">
-        <div class="input-group">
-          <label for="playerName">Your Name</label>
-          <input type="text" id="playerName" placeholder="Enter your name..." maxlength="20" autocomplete="off" spellcheck="false">
-        </div>
-
         <div class="lobby-actions">
           <button class="btn btn-primary btn-glow" id="createRoomBtn">
             <span class="btn-icon">✦</span>
@@ -71,6 +141,8 @@
             <input type="text" id="roomCodeInput" placeholder="Room code" maxlength="5" autocomplete="off" spellcheck="false" style="text-transform: uppercase;">
             <button class="btn btn-secondary" id="joinRoomBtn">Join</button>
           </div>
+          
+          <button class="btn btn-ghost" id="logoutBtn" style="margin-top:var(--space-md);">Logout</button>
         </div>
       </div>
     </div>
@@ -219,6 +291,105 @@
     </div>
   </section>
 
+  <!-- ═══ Settings Modal ═══ -->
+  <div class="modal-overlay" id="settingsModal" style="display:none;">
+    <div class="modal-panel glass-panel">
+      <div class="modal-header">
+        <h2>Account Settings</h2>
+        <button class="modal-close-btn" id="closeSettingsBtn">✕</button>
+      </div>
+      
+      <div class="settings-tabs">
+        <button class="settings-tab active" id="tabProfileSettingsBtn">Profile</button>
+        <button class="settings-tab" id="tabSecuritySettingsBtn">Security</button>
+      </div>
+
+      <!-- Profile Tab Content -->
+      <div class="settings-content active" id="profileSettingsContent">
+        <form id="profileSettingsForm">
+          <div class="avatar-picker-title">Select Profile Picture</div>
+          <div class="avatar-grid">
+            <div class="avatar-option avatar-1 selected" data-avatar="avatar-1">P</div>
+            <div class="avatar-option avatar-2" data-avatar="avatar-2">P</div>
+            <div class="avatar-option avatar-3" data-avatar="avatar-3">P</div>
+            <div class="avatar-option avatar-4" data-avatar="avatar-4">P</div>
+            <div class="avatar-option avatar-5" data-avatar="avatar-5">P</div>
+          </div>
+          
+          <div class="input-group">
+            <label for="settingsBio">Bio</label>
+            <textarea id="settingsBio" rows="3" placeholder="Tell other players about yourself..." maxlength="100"></textarea>
+          </div>
+          
+          <button type="submit" class="btn btn-primary btn-glow btn-large">Save Changes</button>
+        </form>
+      </div>
+
+      <!-- Security Tab Content -->
+      <div class="settings-content" id="securitySettingsContent" style="display:none;">
+        <form id="securitySettingsForm">
+          <div class="input-group">
+            <label for="settingsNewPassword">New Password</label>
+            <input type="password" id="settingsNewPassword" placeholder="Enter new password..." minlength="4" required>
+          </div>
+          
+          <button type="submit" class="btn btn-primary btn-glow btn-large">Change Password</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Player Profile / Stalker Overlay ═══ -->
+  <div class="modal-overlay" id="profileModal" style="display:none;">
+    <div class="modal-panel glass-panel profile-panel">
+      <button class="modal-close-btn" id="closeProfileBtn">✕</button>
+      <div class="profile-card-header">
+        <div class="profile-avatar avatar-1" id="profileAvatar">P</div>
+        <h2 class="profile-name" id="profileUsername">Username</h2>
+        <span class="lol-rank-badge" id="profileRankBadge">⚙️ Iron</span>
+      </div>
+
+      <div class="profile-bio" id="profileBio">Loading player bio...</div>
+
+      <div class="profile-stats-grid">
+        <div class="stat-box">
+          <span class="stat-value" id="profileStatChips">10,000</span>
+          <span class="stat-label">Chips</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="profileStatRP">0</span>
+          <span class="stat-label">Rank Points</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="profileStatWins">0</span>
+          <span class="stat-label">Wins</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="profileStatWR">0%</span>
+          <span class="stat-label">Win Rate</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value" id="profileStatBJs">0</span>
+          <span class="stat-label">Blackjacks</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Leaderboard Modal ═══ -->
+  <div class="modal-overlay" id="leaderboardModal" style="display:none;">
+    <div class="modal-panel glass-panel leaderboard-panel">
+      <div class="modal-header">
+        <h2>🏆 Chip Leaderboard</h2>
+        <button class="modal-close-btn" id="closeLeaderboardBtn">✕</button>
+      </div>
+      <div class="leaderboard-list" id="leaderboardList">
+        <!-- Ranked rows here -->
+        <div style="text-align:center;padding:var(--space-lg);color:var(--text-muted);">Loading standings...</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Toast Notifications ═══ -->
   <div class="toast-container" id="toastContainer"></div>
 
@@ -239,6 +410,7 @@
     </div>
   </div>
 
+  <script src="db.js"></script>
   <script src="sounds.js"></script>
   <script src="cards.js"></script>
   <script src="game.js"></script>

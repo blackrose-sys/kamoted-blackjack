@@ -23,13 +23,23 @@ let pendingState = null;
 const $ = (id) => document.getElementById(id);
 
 const views = {
+  auth: $('authView'),
   lobby: $('lobbyView'),
   waiting: $('waitingView'),
   game: $('gameView'),
 };
 
 const els = {
-  playerName: $('playerName'),
+  authUsername: $('authUsername'),
+  authPassword: $('authPassword'),
+  authForm: $('authForm'),
+  tabLoginBtn: $('tabLoginBtn'),
+  tabSignupBtn: $('tabSignupBtn'),
+  signupNotice: $('signupNotice'),
+  authSubmitBtn: $('authSubmitBtn'),
+  lobbyUserName: $('lobbyUserName'),
+  logoutBtn: $('logoutBtn'),
+
   createRoomBtn: $('createRoomBtn'),
   joinRoomBtn: $('joinRoomBtn'),
   roomCodeInput: $('roomCodeInput'),
@@ -75,6 +85,39 @@ const els = {
   bustedLobbyBtn: $('bustedLobbyBtn'),
 
   soundToggle: $('soundToggle'),
+  leaderboardBtn: $('leaderboardBtn'),
+  settingsBtn: $('settingsBtn'),
+  userProfileBadge: $('userProfileBadge'),
+  headerAvatar: $('headerAvatar'),
+  headerUsername: $('headerUsername'),
+  headerRank: $('headerRank'),
+
+  settingsModal: $('settingsModal'),
+  closeSettingsBtn: $('closeSettingsBtn'),
+  tabProfileSettingsBtn: $('tabProfileSettingsBtn'),
+  tabSecuritySettingsBtn: $('tabSecuritySettingsBtn'),
+  profileSettingsContent: $('profileSettingsContent'),
+  securitySettingsContent: $('securitySettingsContent'),
+  profileSettingsForm: $('profileSettingsForm'),
+  securitySettingsForm: $('securitySettingsForm'),
+  settingsBio: $('settingsBio'),
+  settingsNewPassword: $('settingsNewPassword'),
+
+  profileModal: $('profileModal'),
+  closeProfileBtn: $('closeProfileBtn'),
+  profileAvatar: $('profileAvatar'),
+  profileUsername: $('profileUsername'),
+  profileRankBadge: $('profileRankBadge'),
+  profileBio: $('profileBio'),
+  profileStatChips: $('profileStatChips'),
+  profileStatRP: $('profileStatRP'),
+  profileStatWins: $('profileStatWins'),
+  profileStatWR: $('profileStatWR'),
+  profileStatBJs: $('profileStatBJs'),
+
+  leaderboardModal: $('leaderboardModal'),
+  closeLeaderboardBtn: $('closeLeaderboardBtn'),
+  leaderboardList: $('leaderboardList'),
 
   chatBubble: $('chatBubble'),
   chatBadge: $('chatBadge'),
@@ -156,9 +199,9 @@ function handleMessage(msg) {
       break;
 
     case 'left_room':
-      showView('lobby');
+      showView('auth');
       resetAnimationState();
-      els.bustedOverlay.style.display = 'none';
+      if (els.bustedOverlay) els.bustedOverlay.style.display = 'none';
       break;
 
     case 'error':
@@ -430,8 +473,21 @@ function animateDealerReveal(state) {
 }
 
 // ─── Animation: Results ──────────────────────────────────────────
+let lastSavedRound = -1;
+
 function animateResults(state) {
   const me = state.players.find(p => p.id === myId);
+
+  // Auto-save persistent profile stats to Supabase/MockDB
+  if (me && me.results[0] && typeof me.results[0] === 'object' && state.roundNumber !== lastSavedRound) {
+    lastSavedRound = state.roundNumber;
+    const outcome = me.results[0].outcome;
+    const isBJ = outcome === 'blackjack';
+    
+    DB.saveStats(me.chips, outcome, isBJ)
+      .then(() => updateUserProfileUI())
+      .catch(err => console.error('Error auto-saving persistent stats:', err));
+  }
 
   // Play appropriate sound
   if (me && me.results[0] && typeof me.results[0] === 'object') {
@@ -722,15 +778,25 @@ function renderWaitingRoom(state) {
   state.players.forEach((p, i) => {
     const slot = document.createElement('div');
     slot.className = 'player-slot';
+    
+    // Check if player has customized PFP class
+    const avatarClass = p.pfp || `avatar-${(i % 5) + 1}`;
+    
     slot.innerHTML = `
-      <div class="player-avatar avatar-${(i % 5) + 1}">${escapeHtml(p.name[0])}</div>
+      <div class="player-avatar ${avatarClass}">${escapeHtml(p.name[0])}</div>
       <div class="player-info">
-        <span class="player-name-text">${escapeHtml(p.name)}</span>
+        <span class="player-name-text stalk-trigger" data-username="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
         ${p.isHost ? '<span class="player-badge badge-host">Host</span>' : ''}
         ${p.id === myId ? '<span class="player-badge badge-you">You</span>' : ''}
         <div class="player-chips-text">🪙 ${p.chips.toLocaleString()} chips</div>
       </div>
     `;
+    
+    // Stalk trigger click binding
+    slot.querySelector('.stalk-trigger').addEventListener('click', (e) => {
+      stalkPlayer(e.target.dataset.username);
+    });
+
     els.waitingPlayersList.appendChild(slot);
   });
 
@@ -753,14 +819,23 @@ function createOtherPlayerSlot(p, state, idx) {
   slot.className = 'other-player-slot' + (isActive ? ' active-turn' : '');
   slot.dataset.playerId = p.id;
 
+  const avatarClass = p.pfp || 'avatar-1';
+
   slot.innerHTML = `
-    <span class="other-player-name">${escapeHtml(p.name)}${isActive ? ' ⏳' : ''}</span>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div class="user-badge-avatar ${avatarClass}" style="width:20px;height:20px;font-size:0.6rem;">${p.name[0]}</div>
+      <span class="other-player-name stalk-trigger" data-username="${escapeHtml(p.name)}">${escapeHtml(p.name)}${isActive ? ' ⏳' : ''}</span>
+    </div>
     <div class="other-player-cards"></div>
     <div class="other-player-meta">
       <span class="other-player-value"></span>
       <span class="other-player-bet">🪙 ${p.bets[0]}</span>
     </div>
   `;
+
+  slot.querySelector('.stalk-trigger').addEventListener('click', (e) => {
+    stalkPlayer(e.target.dataset.username);
+  });
 
   return slot;
 }
@@ -802,10 +877,19 @@ function renderOtherPlayers(state) {
       `;
     });
 
+    const avatarClass = p.pfp || 'avatar-1';
+
     slot.innerHTML = `
-      <span class="other-player-name">${escapeHtml(p.name)}${isActive ? ' ⏳' : ''}</span>
+      <div style="display:flex;align-items:center;gap:6px;justify-content:center;">
+        <div class="user-badge-avatar ${avatarClass}" style="width:20px;height:20px;font-size:0.6rem;">${p.name[0]}</div>
+        <span class="other-player-name stalk-trigger" data-username="${escapeHtml(p.name)}">${escapeHtml(p.name)}${isActive ? ' ⏳' : ''}</span>
+      </div>
       ${handsHtml}
     `;
+
+    slot.querySelector('.stalk-trigger').addEventListener('click', (e) => {
+      stalkPlayer(e.target.dataset.username);
+    });
 
     els.otherPlayers.appendChild(slot);
   });
