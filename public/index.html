@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Kamoted Blackjack — Play multiplayer blackjack with your friends in real-time. Create a room, invite friends, and enjoy premium casino-style gameplay with stunning animations.">
+  <title>Kamoted Blackjack — Multiplayer Casino Card Game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ═══ Ambient Background ═══ -->
+  <div class="ambient-bg">
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+  </div>
+
+  <!-- ═══ Top Bar ═══ -->
+  <header class="top-bar" id="topBar">
+    <div class="top-bar-left">
+      <span class="logo">♠</span>
+      <h1 class="brand">Kamoted<span class="brand-accent"> Blackjack</span></h1>
+    </div>
+    <div class="top-bar-right">
+      <button class="icon-btn sound-toggle" id="soundToggle" title="Toggle Sound">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+      </button>
+      <div class="chip-display" id="chipDisplay" style="display:none;">
+        <span class="chip-icon">🪙</span>
+        <span class="chip-amount" id="chipAmount">1000</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══ LOBBY VIEW ═══ -->
+  <section class="view active" id="lobbyView">
+    <div class="lobby-container">
+      <div class="lobby-hero">
+        <div class="suit-watermark">♠</div>
+        <div class="hero-cards">
+          <div class="hero-card hero-card-1">
+            <span class="hero-rank">A</span>
+            <span class="hero-suit hearts">♥</span>
+          </div>
+          <div class="hero-card hero-card-2">
+            <span class="hero-rank">K</span>
+            <span class="hero-suit spades">♠</span>
+          </div>
+        </div>
+        <h2 class="lobby-title">Kamoted<br><span class="lobby-title-accent">Blackjack</span></h2>
+        <p class="lobby-subtitle">Multiplayer • Real-time • Up to 5 players</p>
+      </div>
+
+      <div class="lobby-form glass-panel">
+        <div class="input-group">
+          <label for="playerName">Your Name</label>
+          <input type="text" id="playerName" placeholder="Enter your name..." maxlength="20" autocomplete="off" spellcheck="false">
+        </div>
+
+        <div class="lobby-actions">
+          <button class="btn btn-primary btn-glow" id="createRoomBtn">
+            <span class="btn-icon">✦</span>
+            Create Table
+          </button>
+          <div class="divider-text"><span>or join a friend</span></div>
+          <div class="join-row">
+            <input type="text" id="roomCodeInput" placeholder="Room code" maxlength="5" autocomplete="off" spellcheck="false" style="text-transform: uppercase;">
+            <button class="btn btn-secondary" id="joinRoomBtn">Join</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ WAITING ROOM VIEW ═══ -->
+  <section class="view" id="waitingView">
+    <div class="waiting-container">
+      <div class="glass-panel waiting-panel">
+        <div class="room-header">
+          <h2>Your Table</h2>
+          <div class="room-code-display">
+            <span class="room-code-label">Room Code</span>
+            <div class="room-code-value" id="roomCodeDisplay">-----</div>
+            <button class="btn-copy" id="copyCodeBtn" title="Copy room code">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="players-list" id="waitingPlayersList">
+          <!-- Players will be inserted here -->
+        </div>
+
+        <div class="waiting-actions">
+          <button class="btn btn-primary btn-glow btn-large" id="startGameBtn" style="display:none;">
+            <span class="btn-icon">🃏</span>
+            Deal Cards
+          </button>
+          <p class="waiting-hint" id="waitingHint">Waiting for host to start...</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ GAME VIEW ═══ -->
+  <section class="view" id="gameView">
+    <div class="game-container">
+
+      <!-- Dealer Area -->
+      <div class="dealer-area">
+        <div class="dealer-label">
+          <span class="dealer-name">Dealer</span>
+          <span class="dealer-value" id="dealerValue"></span>
+        </div>
+        <div class="dealer-cards" id="dealerCards">
+          <!-- Dealer cards inserted here -->
+        </div>
+      </div>
+
+      <!-- Game Status -->
+      <div class="game-status" id="gameStatus">
+        <!-- Status messages -->
+      </div>
+
+      <!-- Other Players -->
+      <div class="other-players" id="otherPlayers">
+        <!-- Other player slots -->
+      </div>
+
+      <!-- Your Hand -->
+      <div class="your-area" id="yourArea">
+        <div class="your-info">
+          <span class="your-name" id="yourName">You</span>
+          <span class="your-bet" id="yourBet"></span>
+          <span class="your-value" id="yourValue"></span>
+        </div>
+        <div class="your-hands" id="yourHands">
+          <!-- Your cards -->
+        </div>
+      </div>
+
+      <!-- Betting Panel -->
+      <div class="betting-panel glass-panel" id="bettingPanel" style="display:none;">
+        <h3 class="betting-title">Place Your Bet</h3>
+        <div class="chip-selector" id="chipSelector">
+          <button class="chip-btn" data-value="10"><span class="chip-face">10</span></button>
+          <button class="chip-btn" data-value="25"><span class="chip-face">25</span></button>
+          <button class="chip-btn" data-value="50"><span class="chip-face">50</span></button>
+          <button class="chip-btn" data-value="100"><span class="chip-face">100</span></button>
+          <button class="chip-btn" data-value="250"><span class="chip-face">250</span></button>
+          <button class="chip-btn" data-value="500"><span class="chip-face">500</span></button>
+        </div>
+        <div class="bet-display">
+          <span class="bet-label">Your Bet:</span>
+          <span class="bet-amount" id="betAmount">0</span>
+        </div>
+        <div class="bet-actions">
+          <button class="btn btn-ghost" id="clearBetBtn">Clear</button>
+          <button class="btn btn-primary btn-glow" id="confirmBetBtn">Confirm Bet</button>
+        </div>
+      </div>
+
+      <!-- Action Bar -->
+      <div class="action-bar" id="actionBar" style="display:none;">
+        <button class="btn btn-action btn-hit" id="hitBtn">
+          <span class="action-key">H</span>
+          Hit
+        </button>
+        <button class="btn btn-action btn-stand" id="standBtn">
+          <span class="action-key">S</span>
+          Stand
+        </button>
+        <button class="btn btn-action btn-double" id="doubleBtn" style="display:none;">
+          <span class="action-key">D</span>
+          Double
+        </button>
+        <button class="btn btn-action btn-split" id="splitBtn" style="display:none;">
+          <span class="action-key">P</span>
+          Split
+        </button>
+      </div>
+
+      <!-- Results Overlay -->
+      <div class="results-overlay" id="resultsOverlay" style="display:none;">
+        <div class="results-panel glass-panel">
+          <h2 class="results-title" id="resultsTitle">Round Over</h2>
+          <div class="results-list" id="resultsList">
+            <!-- Results here -->
+          </div>
+          <button class="btn btn-primary btn-glow btn-large" id="newRoundBtn" style="display:none;">
+            Next Round
+          </button>
+          <p class="results-hint" id="resultsHint" style="display:none;">Waiting for host...</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Toast Notifications ═══ -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ═══ Chat ═══ -->
+  <div class="chat-bubble" id="chatBubble">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+    <span class="chat-badge" id="chatBadge" style="display:none;">0</span>
+  </div>
+  <div class="chat-panel glass-panel" id="chatPanel" style="display:none;">
+    <div class="chat-header">
+      <h3>Table Chat</h3>
+      <button class="chat-close" id="chatClose">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="Say something..." maxlength="200" autocomplete="off">
+      <button class="btn btn-primary btn-sm" id="chatSend">Send</button>
+    </div>
+  </div>
+
+  <script src="sounds.js"></script>
+  <script src="cards.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

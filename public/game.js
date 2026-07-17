@@ -1,0 +1,1209 @@
+/* ═══════════════════════════════════════════════════════════════════
+   GAME — Client-side game logic & WebSocket communication
+   Full animation orchestration with suspenseful card flipping
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ─── State ───────────────────────────────────────────────────────
+let ws = null;
+let gameState = null;
+let myId = null;
+let currentBet = 0;
+let chatOpen = false;
+let unreadMessages = 0;
+let previousPhase = null;
+
+// Animation state tracking — prevents re-rendering animated elements
+let renderedDealerCards = 0;
+let renderedPlayerCards = {};  // { 'playerId-handIdx': count }
+let dealerHoleRevealed = false;
+let animationLock = false; // Prevents state updates during animations
+let pendingState = null;
+
+// ─── DOM Elements ────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+
+const views = {
+  lobby: $('lobbyView'),
+  waiting: $('waitingView'),
+  game: $('gameView'),
+};
+
+const els = {
+  playerName: $('playerName'),
+  createRoomBtn: $('createRoomBtn'),
+  joinRoomBtn: $('joinRoomBtn'),
+  roomCodeInput: $('roomCodeInput'),
+
+  roomCodeDisplay: $('roomCodeDisplay'),
+  copyCodeBtn: $('copyCodeBtn'),
+  waitingPlayersList: $('waitingPlayersList'),
+  startGameBtn: $('startGameBtn'),
+  waitingHint: $('waitingHint'),
+
+  chipDisplay: $('chipDisplay'),
+  chipAmount: $('chipAmount'),
+
+  dealerCards: $('dealerCards'),
+  dealerValue: $('dealerValue'),
+  gameStatus: $('gameStatus'),
+  otherPlayers: $('otherPlayers'),
+  yourArea: $('yourArea'),
+  yourName: $('yourName'),
+  yourBet: $('yourBet'),
+  yourValue: $('yourValue'),
+  yourHands: $('yourHands'),
+
+  bettingPanel: $('bettingPanel'),
+  betAmount: $('betAmount'),
+  confirmBetBtn: $('confirmBetBtn'),
+  clearBetBtn: $('clearBetBtn'),
+
+  actionBar: $('actionBar'),
+  hitBtn: $('hitBtn'),
+  standBtn: $('standBtn'),
+  doubleBtn: $('doubleBtn'),
+  splitBtn: $('splitBtn'),
+
+  resultsOverlay: $('resultsOverlay'),
+  resultsTitle: $('resultsTitle'),
+  resultsList: $('resultsList'),
+  newRoundBtn: $('newRoundBtn'),
+  resultsHint: $('resultsHint'),
+
+  soundToggle: $('soundToggle'),
+
+  chatBubble: $('chatBubble'),
+  chatBadge: $('chatBadge'),
+  chatPanel: $('chatPanel'),
+  chatClose: $('chatClose'),
+  chatMessages: $('chatMessages'),
+  chatInput: $('chatInput'),
+  chatSend: $('chatSend'),
+
+  toastContainer: $('toastContainer'),
+};
+
+// ─── View Management ─────────────────────────────────────────────
+function showView(name) {
+  Object.values(views).forEach(v => v.classList.remove('active'));
+  views[name].classList.add('active');
+}
+
+// ─── Toast ───────────────────────────────────────────────────────
+function showToast(message, type = 'info', duration = 3000) {
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  els.toastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('toast-exit');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+// ─── WebSocket ───────────────────────────────────────────────────
+function connect() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${protocol}//${location.host}`);
+
+  ws.onopen = () => {
+    console.log('Connected to server');
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    handleMessage(msg);
+  };
+
+  ws.onclose = () => {
+    console.log('Disconnected');
+    showToast('Connection lost. Reconnecting...', 'error');
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => {
+    console.error('WebSocket error');
+  };
+}
+
+function send(type, data = {}) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type, ...data }));
+  }
+}
+
+// ─── Message Handler ─────────────────────────────────────────────
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'room_created':
+    case 'room_joined':
+      showView('waiting');
+      els.roomCodeDisplay.textContent = msg.data.code;
+      break;
+
+    case 'state':
+      // If animations are running, queue the state update
+      if (animationLock) {
+        pendingState = msg.data;
+        return;
+      }
+      handleStateUpdate(msg.data);
+      break;
+
+    case 'error':
+      showToast(msg.data.message, 'error');
+      break;
+
+    case 'message':
+      addChatMessage(msg.data.text, msg.data.sender);
+      break;
+  }
+}
+
+// ─── State Update ────────────────────────────────────────────────
+function handleStateUpdate(state) {
+  const prevPhase = previousPhase;
+  const prevState = gameState;
+  gameState = state;
+  myId = state.you;
+
+  const me = state.players.find(p => p.id === myId);
+  if (me) {
+    els.chipDisplay.style.display = 'flex';
+    els.chipAmount.textContent = me.chips.toLocaleString();
+  }
+
+  if (state.phase === 'waiting') {
+    showView('waiting');
+    renderWaitingRoom(state);
+    resetAnimationState();
+  } else {
+    showView('game');
+
+    // Detect phase transitions for animation orchestration
+    const isNewPhase = prevPhase !== state.phase;
+
+    if (isNewPhase && state.phase === 'dealing') {
+      // Cards just got dealt — orchestrate the full deal animation
+      resetAnimationState();
+      animateDealSequence(state);
+    } else if (isNewPhase && state.phase === 'dealer_turn') {
+      // Dealer's turn — reveal hole card dramatically
+      animateDealerReveal(state);
+    } else if (isNewPhase && state.phase === 'results') {
+      // Show results
+      renderGameUI(state);
+      animateResults(state);
+    } else if (state.phase === 'playing' || state.phase === 'dealer_turn') {
+      // During play — incremental card updates (hits, dealer draws)
+      renderIncrementalUpdate(state, prevState);
+    } else {
+      renderGameUI(state);
+    }
+  }
+
+  previousPhase = state.phase;
+}
+
+function resetAnimationState() {
+  renderedDealerCards = 0;
+  renderedPlayerCards = {};
+  dealerHoleRevealed = false;
+  animationLock = false;
+  pendingState = null;
+}
+
+function unlockAnimations() {
+  animationLock = false;
+  if (pendingState) {
+    const state = pendingState;
+    pendingState = null;
+    handleStateUpdate(state);
+  }
+}
+
+// ─── Animation: Deal Sequence ────────────────────────────────────
+// Orchestrates the initial deal: cards slide in face-down, then flip one by one
+function animateDealSequence(state) {
+  animationLock = true;
+
+  // Clear card areas
+  els.dealerCards.innerHTML = '';
+  els.yourHands.innerHTML = '';
+  els.otherPlayers.innerHTML = '';
+
+  // Gather all cards to deal
+  const allPlayers = state.players;
+  const me = allPlayers.find(p => p.id === myId);
+  const others = allPlayers.filter(p => p.id !== myId);
+
+  // Build the deal order: alternating player cards then dealer
+  // Round 1: one card to each player, one to dealer
+  // Round 2: one card to each player, one to dealer (hole card)
+  const dealSequence = [];
+  const dealInterval = 200; // ms between each card deal
+  const flipStartDelay = (allPlayers.length * 2 + 2) * dealInterval + 400; // after all cards dealt
+  const flipInterval = 250; // ms between each flip
+  let flipIdx = 0;
+
+  // Setup other players containers
+  const otherContainers = {};
+  others.forEach((p, idx) => {
+    const slot = createOtherPlayerSlot(p, state, idx);
+    els.otherPlayers.appendChild(slot);
+    otherContainers[p.id] = slot.querySelector('.other-player-cards');
+  });
+
+  // Setup your hand container
+  const myCardsDiv = document.createElement('div');
+  myCardsDiv.className = 'hand-container';
+  const myCards = document.createElement('div');
+  myCards.className = 'hand-cards';
+  myCardsDiv.appendChild(myCards);
+  els.yourHands.appendChild(myCardsDiv);
+
+  // Update player info
+  if (me) {
+    els.yourName.textContent = me.name;
+    els.yourBet.textContent = '🪙 ' + me.bets[0];
+    els.yourValue.textContent = '';
+  }
+
+  // Round 1: first card to each player, then dealer
+  for (let round = 0; round < 2; round++) {
+    // Players
+    allPlayers.forEach((p) => {
+      const card = p.hands[0][round];
+      if (!card) return;
+
+      const isMe = p.id === myId;
+      const container = isMe ? myCards : otherContainers[p.id];
+      const small = !isMe;
+      const isHidden = false; // Player cards are always visible
+
+      dealSequence.push({
+        card,
+        container,
+        small,
+        flipIdx: flipIdx++,
+      });
+    });
+
+    // Dealer
+    const dealerCard = state.dealer.hand[round];
+    if (dealerCard) {
+      const isDealerHole = round === 1;
+      dealSequence.push({
+        card: dealerCard,
+        container: els.dealerCards,
+        small: false,
+        flipIdx: isDealerHole ? -1 : flipIdx++, // -1 = don't flip (hole card stays face-down)
+        isDealerHole,
+      });
+    }
+  }
+
+  // Now animate the sequence
+  dealSequence.forEach((item, i) => {
+    const dealDelay = i * dealInterval;
+    const shouldFlip = item.flipIdx >= 0;
+    const flipDelay = shouldFlip
+      ? flipStartDelay + item.flipIdx * flipInterval
+      : 0;
+
+    setTimeout(() => {
+      const el = createCardElement(item.card, {
+        small: item.small,
+        startHidden: true, // All cards start face-down
+        flipDelay: shouldFlip ? (flipDelay - dealDelay) : 0,
+      });
+
+      if (item.isDealerHole) {
+        el.dataset.holeCard = 'true';
+      }
+
+      item.container.appendChild(el);
+      sounds.cardDeal();
+    }, dealDelay);
+  });
+
+  // After all flips complete, update values and unlock
+  const totalTime = flipStartDelay + flipIdx * flipInterval + 700;
+
+  // Show hand values progressively as cards flip
+  setTimeout(() => {
+    // Update dealer showing value (first card only)
+    const dealerUpCard = state.dealer.hand[0];
+    if (dealerUpCard) {
+      const upVal = dealerUpCard.rank === 'A' ? 11
+        : ['J','Q','K'].includes(dealerUpCard.rank) ? 10
+        : parseInt(dealerUpCard.rank);
+      els.dealerValue.textContent = upVal;
+      els.dealerValue.style.color = '';
+    }
+  }, flipStartDelay + 300);
+
+  setTimeout(() => {
+    // Update player hand values
+    if (me) {
+      updateYourValueDisplay(me);
+    }
+    updateOtherPlayersValues(state);
+
+    // Check for blackjack animations
+    allPlayers.forEach(p => {
+      if (p.results[0] === 'blackjack' || (typeof p.results[0] === 'object' && p.results[0]?.outcome === 'blackjack')) {
+        if (p.id === myId) {
+          myCards.querySelectorAll('.playing-card').forEach(c => c.classList.add('card-blackjack'));
+        }
+      }
+    });
+
+    renderedDealerCards = state.dealer.hand.length;
+    state.players.forEach(p => {
+      p.hands.forEach((h, hi) => {
+        renderedPlayerCards[`${p.id}-${hi}`] = h.length;
+      });
+    });
+
+    renderGameStatus(state);
+    renderControls(state);
+    unlockAnimations();
+  }, totalTime);
+}
+
+// ─── Animation: Dealer Hole Card Reveal ──────────────────────────
+function animateDealerReveal(state) {
+  if (dealerHoleRevealed) {
+    renderGameUI(state);
+    return;
+  }
+
+  animationLock = true;
+  dealerHoleRevealed = true;
+
+  // Find the hole card element (second card in dealer area)
+  const dealerCardEls = els.dealerCards.querySelectorAll('.playing-card');
+  const holeCardEl = dealerCardEls[1]; // Second card is the hole card
+  const actualCard = state.dealer.hand[1];
+
+  if (holeCardEl && actualCard && !actualCard.hidden) {
+    // Dramatic pause, then reveal
+    holeCardEl.classList.add('dealer-reveal');
+
+    revealCard(holeCardEl, actualCard, 300).then(() => {
+      sounds.cardFlip();
+
+      // Update dealer value
+      els.dealerValue.textContent = state.dealer.value;
+      els.dealerValue.style.color = '';
+
+      // Small delay then unlock for dealer draws
+      setTimeout(() => {
+        renderGameStatus(state);
+        renderedDealerCards = state.dealer.hand.length;
+        unlockAnimations();
+      }, 400);
+    });
+  } else {
+    renderGameUI(state);
+    unlockAnimations();
+  }
+}
+
+// ─── Animation: Results ──────────────────────────────────────────
+function animateResults(state) {
+  const me = state.players.find(p => p.id === myId);
+
+  // Play appropriate sound
+  if (me && me.results[0] && typeof me.results[0] === 'object') {
+    const outcome = me.results[0].outcome;
+    setTimeout(() => {
+      switch (outcome) {
+        case 'blackjack': sounds.blackjack(); break;
+        case 'win': sounds.win(); break;
+        case 'lose': sounds.lose(); break;
+        case 'push': sounds.push(); break;
+      }
+    }, 400);
+
+    // Add visual effect to your cards
+    if (outcome === 'win' || outcome === 'blackjack') {
+      els.yourHands.querySelectorAll('.playing-card').forEach(c => {
+        c.classList.add('card-blackjack');
+      });
+    } else if (outcome === 'lose') {
+      els.yourHands.querySelectorAll('.playing-card').forEach(c => {
+        c.classList.add('card-bust-shake');
+      });
+    }
+  }
+
+  // Show results overlay with delay for suspense
+  setTimeout(() => {
+    renderResults(state);
+  }, 600);
+}
+
+// ─── Incremental Update (during play) ────────────────────────────
+// Only adds new cards, doesn't re-render everything
+function renderIncrementalUpdate(state, prevState) {
+  const me = state.players.find(p => p.id === myId);
+  const others = state.players.filter(p => p.id !== myId);
+
+  // Check for new dealer cards (dealer drawing)
+  if (state.dealer.hand.length > renderedDealerCards) {
+    const newCards = state.dealer.hand.slice(renderedDealerCards);
+    newCards.forEach((card, i) => {
+      setTimeout(() => {
+        const el = createCardElement(card, {
+          startHidden: true,
+          flipDelay: 300,
+        });
+        el.classList.add('card-highlight');
+        els.dealerCards.appendChild(el);
+        sounds.cardDeal();
+      }, i * 400);
+    });
+    renderedDealerCards = state.dealer.hand.length;
+
+    // Update dealer value after flip
+    setTimeout(() => {
+      const val = state.dealer.value;
+      els.dealerValue.textContent = val;
+      if (val > 21) {
+        els.dealerValue.textContent = val + ' BUST';
+        els.dealerValue.style.color = '#f87171';
+        els.dealerCards.querySelectorAll('.playing-card').forEach(c => {
+          c.classList.add('card-bust-shake');
+        });
+        sounds.bust();
+      }
+    }, newCards.length * 400 + 500);
+  }
+
+  // Check for new player cards (hits)
+  if (me) {
+    me.hands.forEach((hand, hi) => {
+      const key = `${me.id}-${hi}`;
+      const prevCount = renderedPlayerCards[key] || 0;
+
+      if (hand.length > prevCount) {
+        // New card was hit — find or create the hand container
+        let handContainer = els.yourHands.querySelectorAll('.hand-cards')[hi];
+        if (!handContainer) {
+          // New hand (split) — create container
+          rebuildYourHandContainers(me, state);
+          handContainer = els.yourHands.querySelectorAll('.hand-cards')[hi];
+        }
+
+        if (handContainer) {
+          const newCards = hand.slice(prevCount);
+          newCards.forEach((card) => {
+            const el = createCardElement(card, {
+              startHidden: true,
+              flipDelay: 300,
+            });
+            el.classList.add('card-highlight');
+            handContainer.appendChild(el);
+            sounds.cardDeal();
+          });
+        }
+
+        renderedPlayerCards[key] = hand.length;
+
+        // Update value display after flip
+        setTimeout(() => {
+          updateYourValueDisplay(me);
+
+          // Check for bust
+          const val = me.handValues[hi];
+          if (val > 21) {
+            const handCards = els.yourHands.querySelectorAll('.hand-cards')[hi];
+            if (handCards) {
+              handCards.querySelectorAll('.playing-card').forEach(c => {
+                c.classList.add('card-bust-shake');
+              });
+            }
+            sounds.bust();
+          } else if (val === 21) {
+            sounds.chipClink();
+          }
+        }, 500);
+      }
+    });
+
+    // Handle split — rebuild if hand count changed
+    const expectedHands = me.hands.length;
+    const renderedHands = els.yourHands.querySelectorAll('.hand-container').length;
+    if (expectedHands !== renderedHands) {
+      rebuildYourHandContainers(me, state);
+    }
+
+    els.yourBet.textContent = '🪙 ' + me.bets.reduce((a, b) => a + b, 0);
+  }
+
+  // Update other players
+  renderOtherPlayers(state);
+
+  // Update status and controls
+  renderGameStatus(state);
+  renderControls(state);
+}
+
+// ─── Rebuild your hand containers (for split) ────────────────────
+function rebuildYourHandContainers(me, state) {
+  els.yourHands.innerHTML = '';
+
+  me.hands.forEach((hand, hi) => {
+    const container = document.createElement('div');
+    container.className = 'hand-container';
+
+    if (me.hands.length > 1) {
+      const label = document.createElement('div');
+      label.className = 'hand-label';
+      label.textContent = `Hand ${hi + 1} (🪙 ${me.bets[hi]})`;
+      container.appendChild(label);
+    }
+
+    const cardsDiv = document.createElement('div');
+    cardsDiv.className = 'hand-cards';
+
+    // Check if this is the active hand
+    const myIdx = state.players.findIndex(p => p.id === myId);
+    const isMyTurn = state.phase === 'playing' && myIdx === state.currentPlayerIndex;
+    if (isMyTurn && hi === me.currentHandIndex) {
+      cardsDiv.classList.add('hand-active');
+    }
+
+    // Render existing cards (no animation — they're already dealt)
+    hand.forEach(card => {
+      const el = createCardElement(card, { noAnimation: true });
+      // Show face immediately
+      el.querySelector('.card-inner').classList.add('flipped');
+      cardsDiv.appendChild(el);
+    });
+
+    renderedPlayerCards[`${me.id}-${hi}`] = hand.length;
+
+    container.appendChild(cardsDiv);
+
+    // Result badge
+    renderHandResult(container, me.results[hi]);
+
+    els.yourHands.appendChild(container);
+  });
+
+  updateYourValueDisplay(me);
+}
+
+// ─── Full Game UI Render (non-animated, for phase catches) ───────
+function renderGameUI(state) {
+  renderDealerStatic(state);
+  renderOtherPlayers(state);
+  renderYourHandStatic(state);
+  renderGameStatus(state);
+  renderControls(state);
+}
+
+// ─── Static Renders (no animation) ──────────────────────────────
+function renderDealerStatic(state) {
+  const cards = state.dealer.hand || [];
+  els.dealerCards.innerHTML = '';
+
+  cards.forEach(card => {
+    const el = createCardElement(card, { noAnimation: true });
+    if (!card.hidden) {
+      el.querySelector('.card-inner').classList.add('flipped');
+    }
+    els.dealerCards.appendChild(el);
+  });
+
+  renderedDealerCards = cards.length;
+
+  if (cards.length > 0) {
+    if (state.dealer.showAll) {
+      const val = state.dealer.value;
+      els.dealerValue.textContent = val;
+      if (val > 21) {
+        els.dealerValue.textContent = val + ' BUST';
+        els.dealerValue.style.color = '#f87171';
+      } else {
+        els.dealerValue.style.color = '';
+      }
+    } else {
+      // Show only up-card value
+      const upCard = cards[0];
+      if (upCard && !upCard.hidden) {
+        const upVal = upCard.rank === 'A' ? 11
+          : ['J','Q','K'].includes(upCard.rank) ? 10
+          : parseInt(upCard.rank);
+        els.dealerValue.textContent = upVal;
+        els.dealerValue.style.color = '';
+      }
+    }
+  } else {
+    els.dealerValue.textContent = '';
+  }
+}
+
+function renderYourHandStatic(state) {
+  const me = state.players.find(p => p.id === myId);
+  if (!me) return;
+
+  els.yourName.textContent = me.name;
+  els.yourBet.textContent = me.bets[0] > 0 ? '🪙 ' + me.bets.reduce((a, b) => a + b, 0) : '';
+  els.yourHands.innerHTML = '';
+
+  me.hands.forEach((hand, hi) => {
+    const container = document.createElement('div');
+    container.className = 'hand-container';
+
+    if (me.hands.length > 1) {
+      const label = document.createElement('div');
+      label.className = 'hand-label';
+      label.textContent = `Hand ${hi + 1} (🪙 ${me.bets[hi]})`;
+      container.appendChild(label);
+    }
+
+    const cardsDiv = document.createElement('div');
+    cardsDiv.className = 'hand-cards';
+
+    const myIdx = state.players.findIndex(p => p.id === myId);
+    const isMyTurn = state.phase === 'playing' && myIdx === state.currentPlayerIndex;
+    if (isMyTurn && hi === me.currentHandIndex) {
+      cardsDiv.classList.add('hand-active');
+    }
+
+    hand.forEach(card => {
+      const el = createCardElement(card, { noAnimation: true });
+      el.querySelector('.card-inner').classList.add('flipped');
+      cardsDiv.appendChild(el);
+    });
+
+    renderedPlayerCards[`${me.id}-${hi}`] = hand.length;
+    container.appendChild(cardsDiv);
+
+    renderHandResult(container, me.results[hi]);
+
+    els.yourHands.appendChild(container);
+  });
+
+  updateYourValueDisplay(me);
+}
+
+// ─── Render: Waiting Room ────────────────────────────────────────
+function renderWaitingRoom(state) {
+  els.roomCodeDisplay.textContent = state.roomCode;
+
+  const me = state.players.find(p => p.id === myId);
+  const isHost = me && me.isHost;
+
+  // Players list
+  els.waitingPlayersList.innerHTML = '';
+  state.players.forEach((p, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'player-slot';
+    slot.innerHTML = `
+      <div class="player-avatar avatar-${(i % 5) + 1}">${escapeHtml(p.name[0])}</div>
+      <div class="player-info">
+        <span class="player-name-text">${escapeHtml(p.name)}</span>
+        ${p.isHost ? '<span class="player-badge badge-host">Host</span>' : ''}
+        ${p.id === myId ? '<span class="player-badge badge-you">You</span>' : ''}
+        <div class="player-chips-text">🪙 ${p.chips.toLocaleString()} chips</div>
+      </div>
+    `;
+    els.waitingPlayersList.appendChild(slot);
+  });
+
+  // Show/hide start button
+  if (isHost) {
+    els.startGameBtn.style.display = 'inline-flex';
+    els.waitingHint.style.display = 'none';
+  } else {
+    els.startGameBtn.style.display = 'none';
+    els.waitingHint.style.display = 'block';
+  }
+}
+
+// ─── Other Players Rendering ─────────────────────────────────────
+function createOtherPlayerSlot(p, state, idx) {
+  const playerIdx = state.players.findIndex(pl => pl.id === p.id);
+  const isActive = state.phase === 'playing' && playerIdx === state.currentPlayerIndex;
+
+  const slot = document.createElement('div');
+  slot.className = 'other-player-slot' + (isActive ? ' active-turn' : '');
+  slot.dataset.playerId = p.id;
+
+  slot.innerHTML = `
+    <span class="other-player-name">${escapeHtml(p.name)}${isActive ? ' ⏳' : ''}</span>
+    <div class="other-player-cards"></div>
+    <div class="other-player-meta">
+      <span class="other-player-value"></span>
+      <span class="other-player-bet">🪙 ${p.bets[0]}</span>
+    </div>
+  `;
+
+  return slot;
+}
+
+function renderOtherPlayers(state) {
+  const others = state.players.filter(p => p.id !== myId);
+  els.otherPlayers.innerHTML = '';
+
+  others.forEach((p, idx) => {
+    const playerIdx = state.players.findIndex(pl => pl.id === p.id);
+    const isActive = state.phase === 'playing' && playerIdx === state.currentPlayerIndex;
+
+    const slot = document.createElement('div');
+    slot.className = 'other-player-slot' + (isActive ? ' active-turn' : '');
+
+    let handsHtml = '';
+    p.hands.forEach((hand, hi) => {
+      const cards = hand.map(c => {
+        const el = createCardElement(c, { small: true, noAnimation: true });
+        el.querySelector('.card-inner').classList.add('flipped');
+        return el.outerHTML;
+      }).join('');
+
+      let resultHtml = '';
+      if (p.results[hi] && typeof p.results[hi] === 'object') {
+        const r = p.results[hi];
+        resultHtml = `<span class="other-player-result result-${r.outcome}">${formatOutcome(r.outcome)}</span>`;
+      } else if (p.results[hi] === 'bust') {
+        resultHtml = `<span class="other-player-result result-bust">BUST</span>`;
+      }
+
+      handsHtml += `
+        <div class="other-player-cards">${cards}</div>
+        <div class="other-player-meta">
+          <span class="other-player-value">${p.handValues[hi] > 0 ? p.handValues[hi] : ''}</span>
+          <span class="other-player-bet">🪙 ${p.bets[hi]}</span>
+        </div>
+        ${resultHtml}
+      `;
+    });
+
+    slot.innerHTML = `
+      <span class="other-player-name">${escapeHtml(p.name)}${isActive ? ' ⏳' : ''}</span>
+      ${handsHtml}
+    `;
+
+    els.otherPlayers.appendChild(slot);
+  });
+}
+
+function updateOtherPlayersValues(state) {
+  const others = state.players.filter(p => p.id !== myId);
+  const slots = els.otherPlayers.querySelectorAll('.other-player-slot');
+
+  slots.forEach((slot, i) => {
+    if (others[i]) {
+      const valEl = slot.querySelector('.other-player-value');
+      if (valEl) {
+        valEl.textContent = others[i].handValues[0] || '';
+      }
+    }
+  });
+}
+
+// ─── Your Value Display ──────────────────────────────────────────
+function updateYourValueDisplay(me) {
+  if (!me || !me.hands.length) {
+    els.yourValue.textContent = '';
+    return;
+  }
+
+  const activeHand = Math.min(me.currentHandIndex, me.hands.length - 1);
+  const val = me.handValues[activeHand];
+
+  if (me.hands[activeHand] && me.hands[activeHand].length > 0) {
+    els.yourValue.className = 'your-value';
+    if (val > 21) {
+      els.yourValue.textContent = val + ' BUST';
+      els.yourValue.classList.add('bust');
+    } else if (val === 21 && me.hands[activeHand].length === 2 && me.hands.length === 1) {
+      els.yourValue.textContent = 'BLACKJACK!';
+      els.yourValue.classList.add('blackjack');
+    } else {
+      els.yourValue.textContent = val;
+    }
+  } else {
+    els.yourValue.textContent = '';
+  }
+}
+
+// ─── Hand Result Badge ───────────────────────────────────────────
+function renderHandResult(container, result) {
+  if (result && typeof result === 'object') {
+    const resultEl = document.createElement('span');
+    resultEl.className = `other-player-result result-${result.outcome}`;
+    resultEl.textContent = formatOutcome(result.outcome);
+    container.appendChild(resultEl);
+  } else if (result === 'bust') {
+    const resultEl = document.createElement('span');
+    resultEl.className = 'other-player-result result-bust';
+    resultEl.textContent = 'BUST';
+    container.appendChild(resultEl);
+  }
+}
+
+// ─── Game Status ─────────────────────────────────────────────────
+function renderGameStatus(state) {
+  let html = '';
+
+  switch (state.phase) {
+    case 'betting':
+      html = '<span class="status-text">Place your bets!</span>';
+      break;
+    case 'dealing':
+      html = '<span class="status-text">Dealing cards...</span>';
+      break;
+    case 'playing': {
+      const current = state.players[state.currentPlayerIndex];
+      if (current) {
+        if (current.id === myId) {
+          html = '<span class="status-text turn-indicator">⭐ Your turn! Choose an action</span>';
+        } else {
+          html = `<span class="status-text">Waiting for <span class="turn-indicator">${escapeHtml(current.name)}</span>...</span>`;
+        }
+      }
+      break;
+    }
+    case 'dealer_turn':
+      html = '<span class="status-text">Dealer is revealing...</span>';
+      break;
+    case 'results':
+      html = '<span class="status-text">Round complete!</span>';
+      break;
+  }
+
+  els.gameStatus.innerHTML = html;
+}
+
+// ─── Controls ────────────────────────────────────────────────────
+function renderControls(state) {
+  const me = state.players.find(p => p.id === myId);
+  if (!me) return;
+
+  const myIdx = state.players.findIndex(p => p.id === myId);
+  const isMyTurn = state.phase === 'playing' && myIdx === state.currentPlayerIndex;
+
+  // Betting panel
+  if (state.phase === 'betting' && !me.isReady) {
+    els.bettingPanel.style.display = 'flex';
+    els.actionBar.style.display = 'none';
+    els.resultsOverlay.style.display = 'none';
+  } else {
+    els.bettingPanel.style.display = 'none';
+  }
+
+  // Action bar
+  if (isMyTurn) {
+    els.actionBar.style.display = 'flex';
+
+    const handIdx = me.currentHandIndex;
+    els.doubleBtn.style.display = me.canDouble[handIdx] ? 'inline-flex' : 'none';
+    els.splitBtn.style.display = me.canSplit[handIdx] ? 'inline-flex' : 'none';
+
+    // Update active hand indicator
+    const handCards = els.yourHands.querySelectorAll('.hand-cards');
+    handCards.forEach((hc, i) => {
+      hc.classList.toggle('hand-active', i === handIdx);
+    });
+  } else {
+    els.actionBar.style.display = 'none';
+  }
+
+  // Results overlay (rendered separately by animateResults)
+  if (state.phase !== 'results') {
+    els.resultsOverlay.style.display = 'none';
+  }
+}
+
+// ─── Results ─────────────────────────────────────────────────────
+function renderResults(state) {
+  els.resultsOverlay.style.display = 'flex';
+
+  const me = state.players.find(p => p.id === myId);
+  const isHost = me && me.isHost;
+
+  // Determine main title
+  if (me && me.results[0] && typeof me.results[0] === 'object') {
+    const r = me.results[0];
+    switch (r.outcome) {
+      case 'blackjack': els.resultsTitle.textContent = '🃏 BLACKJACK!'; break;
+      case 'win': els.resultsTitle.textContent = '🎉 You Win!'; break;
+      case 'lose': els.resultsTitle.textContent = '😞 You Lose'; break;
+      case 'push': els.resultsTitle.textContent = '🤝 Push'; break;
+      default: els.resultsTitle.textContent = 'Round Over';
+    }
+  } else {
+    els.resultsTitle.textContent = 'Round Over';
+  }
+
+  // Results list
+  els.resultsList.innerHTML = '';
+  state.players.forEach(p => {
+    p.results.forEach((r, i) => {
+      if (!r || typeof r !== 'object') return;
+      const row = document.createElement('div');
+      row.className = 'result-row';
+      row.style.animationDelay = `${i * 0.1}s`;
+
+      const payout = r.payout - p.bets[i];
+      let payoutClass = 'neutral';
+      let payoutText = '±0';
+      if (payout > 0) {
+        payoutClass = 'positive';
+        payoutText = '+' + payout;
+      } else if (payout < 0) {
+        payoutClass = 'negative';
+        payoutText = payout.toString();
+      }
+
+      row.innerHTML = `
+        <span class="result-player-name">${escapeHtml(p.name)}${p.hands.length > 1 ? ` (Hand ${i+1})` : ''}${p.id === myId ? ' ⭐' : ''}</span>
+        <span class="result-outcome">
+          <span class="result-outcome-text result-${r.outcome}">${formatOutcome(r.outcome)}</span>
+          <span class="result-payout ${payoutClass}">${payoutText}</span>
+        </span>
+      `;
+      els.resultsList.appendChild(row);
+    });
+  });
+
+  // New round button
+  if (isHost) {
+    els.newRoundBtn.style.display = 'inline-flex';
+    els.resultsHint.style.display = 'none';
+  } else {
+    els.newRoundBtn.style.display = 'none';
+    els.resultsHint.style.display = 'block';
+  }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────
+function formatOutcome(outcome) {
+  switch (outcome) {
+    case 'blackjack': return 'BLACKJACK';
+    case 'win': return 'WIN';
+    case 'lose': return 'LOSE';
+    case 'push': return 'PUSH';
+    case 'bust': return 'BUST';
+    default: return String(outcome).toUpperCase();
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ─── Chat ────────────────────────────────────────────────────────
+function addChatMessage(text, sender) {
+  const msgEl = document.createElement('div');
+  msgEl.className = 'chat-msg' + (!sender ? ' system-msg' : '');
+
+  if (sender) {
+    msgEl.innerHTML = `<span class="chat-sender">${escapeHtml(sender)}:</span> ${escapeHtml(text)}`;
+  } else {
+    msgEl.textContent = text;
+  }
+
+  els.chatMessages.appendChild(msgEl);
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+
+  if (!chatOpen) {
+    unreadMessages++;
+    els.chatBadge.textContent = unreadMessages;
+    els.chatBadge.style.display = 'flex';
+  }
+}
+
+function toggleChat() {
+  chatOpen = !chatOpen;
+  els.chatPanel.style.display = chatOpen ? 'flex' : 'none';
+  if (chatOpen) {
+    unreadMessages = 0;
+    els.chatBadge.style.display = 'none';
+    els.chatInput.focus();
+  }
+}
+
+function sendChat() {
+  const text = els.chatInput.value.trim();
+  if (!text) return;
+  send('chat', { text });
+  els.chatInput.value = '';
+}
+
+// ─── Event Listeners ─────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize audio on first interaction
+  const initAudio = () => {
+    sounds.init();
+    document.removeEventListener('click', initAudio);
+    document.removeEventListener('keydown', initAudio);
+  };
+  document.addEventListener('click', initAudio);
+  document.addEventListener('keydown', initAudio);
+
+  connect();
+
+  // Lobby
+  els.createRoomBtn.addEventListener('click', () => {
+    const name = els.playerName.value.trim() || 'Player';
+    sounds.click();
+    send('create_room', { name });
+  });
+
+  els.joinRoomBtn.addEventListener('click', () => {
+    const name = els.playerName.value.trim() || 'Player';
+    const code = els.roomCodeInput.value.trim().toUpperCase();
+    if (!code) {
+      showToast('Enter a room code to join', 'warning');
+      return;
+    }
+    sounds.click();
+    send('join_room', { name, code });
+  });
+
+  // Enter key on room code
+  els.roomCodeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') els.joinRoomBtn.click();
+  });
+
+  // Enter key on name
+  els.playerName.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') els.createRoomBtn.click();
+  });
+
+  // Copy room code
+  els.copyCodeBtn.addEventListener('click', () => {
+    const code = els.roomCodeDisplay.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+      showToast('Room code copied!', 'success');
+      sounds.click();
+    }).catch(() => {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = code;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      showToast('Room code copied!', 'success');
+    });
+  });
+
+  // Start game
+  els.startGameBtn.addEventListener('click', () => {
+    sounds.click();
+    send('start_game');
+  });
+
+  // Betting
+  let selectedBet = 0;
+
+  document.querySelectorAll('.chip-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = parseInt(btn.dataset.value);
+      const me = gameState?.players.find(p => p.id === myId);
+      const maxBet = me ? Math.min(500, me.chips) : 500;
+
+      selectedBet = Math.min(selectedBet + val, maxBet);
+      els.betAmount.textContent = selectedBet;
+      sounds.chipClink();
+
+      // Visual feedback — pop the chip
+      btn.style.transform = 'translateY(-6px) scale(1.2)';
+      setTimeout(() => {
+        btn.style.transform = '';
+      }, 200);
+    });
+  });
+
+  els.clearBetBtn.addEventListener('click', () => {
+    selectedBet = 0;
+    els.betAmount.textContent = '0';
+    sounds.click();
+  });
+
+  els.confirmBetBtn.addEventListener('click', () => {
+    if (selectedBet < 10) {
+      showToast('Minimum bet is 10 chips', 'warning');
+      return;
+    }
+    sounds.chipClink();
+    send('place_bet', { amount: selectedBet });
+    selectedBet = 0;
+    els.betAmount.textContent = '0';
+  });
+
+  // Game actions
+  els.hitBtn.addEventListener('click', () => {
+    sounds.click();
+    send('action', { action: 'hit' });
+  });
+
+  els.standBtn.addEventListener('click', () => {
+    sounds.click();
+    send('action', { action: 'stand' });
+  });
+
+  els.doubleBtn.addEventListener('click', () => {
+    sounds.click();
+    send('action', { action: 'double' });
+  });
+
+  els.splitBtn.addEventListener('click', () => {
+    sounds.click();
+    send('action', { action: 'split' });
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+
+    if (els.actionBar.style.display !== 'none') {
+      switch (e.key.toLowerCase()) {
+        case 'h': els.hitBtn.click(); break;
+        case 's': els.standBtn.click(); break;
+        case 'd':
+          if (els.doubleBtn.style.display !== 'none') els.doubleBtn.click();
+          break;
+        case 'p':
+          if (els.splitBtn.style.display !== 'none') els.splitBtn.click();
+          break;
+      }
+    }
+  });
+
+  // New round
+  els.newRoundBtn.addEventListener('click', () => {
+    sounds.click();
+    send('new_round');
+    resetAnimationState();
+  });
+
+  // Sound toggle
+  els.soundToggle.addEventListener('click', () => {
+    const enabled = sounds.toggle();
+    els.soundToggle.style.opacity = enabled ? '1' : '0.4';
+    showToast(enabled ? 'Sound on' : 'Sound off', 'info', 1500);
+  });
+
+  // Chat
+  els.chatBubble.addEventListener('click', toggleChat);
+  els.chatClose.addEventListener('click', toggleChat);
+  els.chatSend.addEventListener('click', sendChat);
+  els.chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendChat();
+  });
+});
+
+// Prevent form submission
+document.addEventListener('submit', (e) => e.preventDefault());
