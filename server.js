@@ -84,15 +84,24 @@ function isBlackjack(hand) {
   return hand.length === 2 && handValue(hand) === 21;
 }
 
+function splitRank(card) {
+  if (['10', 'J', 'Q', 'K'].includes(card.rank)) return '10';
+  return card.rank;
+}
+
 function canSplit(hand, player) {
+  const idx = player.currentHandIndex;
+  if (player.results[idx]) return false;
   return hand.length === 2 &&
-    cardValue(hand[0]) === cardValue(hand[1]) &&
+    splitRank(hand[0]) === splitRank(hand[1]) &&
     player.hands.length < 4 &&
-    player.chips >= player.bets[player.currentHandIndex];
+    player.chips >= player.bets[idx];
 }
 
 function canDouble(hand, player) {
-  return hand.length === 2 && player.chips >= player.bets[player.currentHandIndex];
+  const idx = player.currentHandIndex;
+  if (player.results[idx]) return false;
+  return hand.length === 2 && player.chips >= player.bets[idx];
 }
 
 // ─── Room Management ─────────────────────────────────────────────────
@@ -316,13 +325,15 @@ function playerAction(room, playerId, action) {
       if (canSplit(hand, player)) {
         const card1 = hand[0];
         const card2 = hand[1];
+        const betAmount = player.bets[handIdx];
+        player.chips -= betAmount;
         player.hands[handIdx] = [card1, room.deck.pop()];
         player.hands.splice(handIdx + 1, 0, [card2, room.deck.pop()]);
-        player.bets.splice(handIdx + 1, 0, player.bets[handIdx]);
+        player.bets.splice(handIdx + 1, 0, betAmount);
         player.results.splice(handIdx + 1, 0, undefined);
-        player.chips -= player.bets[handIdx];
+        player.currentHandIndex = handIdx;
 
-        // Check for 21 on split hands
+        // Auto-stand hands that reach 21 after the split draw
         if (handValue(player.hands[handIdx]) === 21) {
           player.results[handIdx] = 'stand';
           advanceHand(room, player);

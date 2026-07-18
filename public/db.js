@@ -132,10 +132,12 @@ const DB = {
       // Load newly created profile
       const profile = await this.getProfile(username);
       this.currentUser = profile;
+      this._persistSession(username);
       return profile;
     } else {
       const user = await MockDB.register(username, password);
       this.currentUser = user;
+      this._persistSession(user.username);
       return user;
     }
   },
@@ -150,10 +152,12 @@ const DB = {
 
       const profile = await this.getProfile(username);
       this.currentUser = profile;
+      this._persistSession(username);
       return profile;
     } else {
       const user = await MockDB.login(username, password);
       this.currentUser = user;
+      this._persistSession(user.username);
       return user;
     }
   },
@@ -217,9 +221,27 @@ const DB = {
 
   logout() {
     this.currentUser = null;
+    localStorage.removeItem('blackjack_session');
     if (sbClient) {
       sbClient.auth.signOut();
     }
+  },
+
+  async restoreSession() {
+    const username = localStorage.getItem('blackjack_session');
+    if (!username) return null;
+    try {
+      const profile = await this.getProfile(username);
+      this.currentUser = profile;
+      return profile;
+    } catch {
+      localStorage.removeItem('blackjack_session');
+      return null;
+    }
+  },
+
+  _persistSession(username) {
+    localStorage.setItem('blackjack_session', username);
   },
 
   // Update game stats in db

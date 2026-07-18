@@ -40,13 +40,6 @@ const els = {
   lobbyUserName: $('lobbyUserName'),
   logoutBtn: $('logoutBtn'),
   
-  dbSetupTrigger: $('dbSetupTrigger'),
-  dbSetupPanel: $('dbSetupPanel'),
-  dbSetupClose: $('dbSetupClose'),
-  dbSetupForm: $('dbSetupForm'),
-  dbUrl: $('dbUrl'),
-  dbAnonKey: $('dbAnonKey'),
-
   createRoomBtn: $('createRoomBtn'),
   joinRoomBtn: $('joinRoomBtn'),
   roomCodeInput: $('roomCodeInput'),
@@ -206,7 +199,11 @@ function handleMessage(msg) {
       break;
 
     case 'left_room':
-      showView('auth');
+      if (DB.currentUser) {
+        showView('lobby');
+      } else {
+        showView('auth');
+      }
       resetAnimationState();
       if (els.bustedOverlay) els.bustedOverlay.style.display = 'none';
       break;
@@ -486,17 +483,21 @@ function animateResults(state) {
   const me = state.players.find(p => p.id === myId);
 
   // Auto-save persistent profile stats to Supabase/MockDB
-  if (me && me.results[0] && typeof me.results[0] === 'object' && state.roundNumber !== lastSavedRound) {
-    lastSavedRound = state.roundNumber;
-    const outcome = me.results[0].outcome;
-    const isBJ = outcome === 'blackjack';
-    
-    DB.saveStats(me.chips, outcome, isBJ)
-      .then(() => updateUserProfileUI())
-      .catch(err => console.error('Error auto-saving persistent stats:', err));
+  if (me && state.roundNumber !== lastSavedRound) {
+    const resolved = me.results.filter(r => r && typeof r === 'object');
+    if (resolved.length > 0) {
+      lastSavedRound = state.roundNumber;
+      const netPayout = resolved.reduce((sum, r, i) => sum + (r.payout - me.bets[i]), 0);
+      const isBJ = resolved.some(r => r.outcome === 'blackjack');
+      const outcome = netPayout > 0 ? 'win' : netPayout < 0 ? 'lose' : 'push';
+
+      DB.saveStats(me.chips, outcome, isBJ)
+        .then(() => updateUserProfileUI())
+        .catch(err => console.error('Error auto-saving persistent stats:', err));
+    }
   }
 
-  // Play appropriate sound
+  // Play appropriate sound for primary hand
   if (me && me.results[0] && typeof me.results[0] === 'object') {
     const outcome = me.results[0].outcome;
     setTimeout(() => {
@@ -531,6 +532,20 @@ function animateResults(state) {
 function renderIncrementalUpdate(state, prevState) {
   const me = state.players.find(p => p.id === myId);
   const others = state.players.filter(p => p.id !== myId);
+
+  // Detect split — hand count increased; rebuild to show both hands correctly
+  if (me && prevState) {
+    const prevMe = prevState.players.find(p => p.id === myId);
+    if (prevMe && me.hands.length > prevMe.hands.length) {
+      rebuildYourHandContainers(me, state);
+      els.yourBet.textContent = '🪙 ' + me.bets.reduce((a, b) => a + b, 0);
+      renderOtherPlayers(state);
+      renderGameStatus(state);
+      renderControls(state);
+      sounds.chipClink();
+      return;
+    }
+  }
 
   // Check for new dealer cards (dealer drawing)
   if (state.dealer.hand.length > renderedDealerCards) {
@@ -1149,6 +1164,20 @@ function sendChat() {
 }
 
 // ─── Update User Profile UI (Header badge) ──────────────────────
+function updateAvatarPickerUI(username, selectedPfp) {
+  const initial = (username || 'P')[0].toUpperCase();
+  const pfp = selectedPfp || 'avatar-1';
+  document.querySelectorAll('.avatar-option').forEach(opt => {
+    opt.textContent = initial;
+    opt.classList.toggle('selected', opt.dataset.avatar === pfp);
+  });
+  const preview = document.getElementById('avatarPreviewImg');
+  if (preview) {
+    preview.className = 'profile-avatar ' + pfp;
+    preview.textContent = initial;
+  }
+}
+
 function updateUserProfileUI() {
   if (!DB.currentUser) return;
   const u = DB.currentUser;
@@ -1251,35 +1280,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   connect();
 
-  // ── Database Configuration ──
-  els.dbSetupTrigger.addEventListener('click', () => {
-    sounds.click();
-    els.dbUrl.value = localStorage.getItem('SB_URL') || '';
-    els.dbAnonKey.value = localStorage.getItem('SB_KEY') || '';
-    els.dbSetupPanel.style.display = 'flex';
-  });
-
-  els.dbSetupClose.addEventListener('click', () => {
-    sounds.click();
-    els.dbSetupPanel.style.display = 'none';
-  });
-
-  els.dbSetupForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    sounds.click();
-    
-    const url = els.dbUrl.value.trim();
-    const key = els.dbAnonKey.value.trim();
-    
-    if (url) localStorage.setItem('SB_URL', url);
-    else localStorage.removeItem('SB_URL');
-
-    if (key) localStorage.setItem('SB_KEY', key);
-    else localStorage.removeItem('SB_KEY');
-
-    showToast('Database configured! Please refresh page to apply.', 'success');
-    els.dbSetupPanel.style.display = 'none';
-  });
+  // Restore session if previously logged in
+  DB.restoreSession().then((user) => {
+    if (user) {
+      updateUserProfileUI();
+      updateAvatarPickerUI(user.username, user.pfp || 'avatar-1');
+      showView('lobby');
+    }
+  }).catch(() => {});
 
   // ── Auth View: Tab Switcher ──
   let authMode = 'login'; // login or signup
@@ -1325,6 +1333,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       updateUserProfileUI();
+      updateAvatarPickerUI(user.username, user.pfp || 'avatar-1');
       showView('lobby');
     } catch (err) {
       showToast(err.message || 'Authentication failed', 'error');
@@ -1523,14 +1532,23 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Settings Modal ──
+  let selectedAvatar = 'avatar-1';
+
+  els.userProfileBadge.addEventListener('click', () => {
+    if (!DB.currentUser) return;
+    sounds.click();
+    selectedAvatar = DB.currentUser.pfp || 'avatar-1';
+    els.settingsBio.value = DB.currentUser.bio || '';
+    updateAvatarPickerUI(DB.currentUser.username, selectedAvatar);
+    els.settingsModal.style.display = 'flex';
+  });
+
   els.settingsBtn.addEventListener('click', () => {
     sounds.click();
     if (DB.currentUser) {
+      selectedAvatar = DB.currentUser.pfp || 'avatar-1';
       els.settingsBio.value = DB.currentUser.bio || '';
-      // Highlight current avatar
-      document.querySelectorAll('.avatar-option').forEach(opt => {
-        opt.classList.toggle('selected', opt.dataset.avatar === (DB.currentUser.pfp || 'avatar-1'));
-      });
+      updateAvatarPickerUI(DB.currentUser.username, selectedAvatar);
     }
     els.settingsModal.style.display = 'flex';
   });
@@ -1558,13 +1576,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Avatar picker
-  let selectedAvatar = DB.currentUser?.pfp || 'avatar-1';
   document.querySelectorAll('.avatar-option').forEach(opt => {
     opt.addEventListener('click', () => {
       sounds.click();
       selectedAvatar = opt.dataset.avatar;
       document.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('selected'));
       opt.classList.add('selected');
+      // Live preview
+      if (DB.currentUser) {
+        els.headerAvatar.className = 'user-badge-avatar ' + selectedAvatar;
+        updateAvatarPickerUI(DB.currentUser.username, selectedAvatar);
+      }
     });
   });
 
@@ -1578,6 +1600,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pfp: selectedAvatar
       });
       updateUserProfileUI();
+      updateAvatarPickerUI(DB.currentUser.username, selectedAvatar);
       showToast('Profile updated!', 'success');
       els.settingsModal.style.display = 'none';
     } catch (err) {
